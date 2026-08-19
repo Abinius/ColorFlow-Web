@@ -444,6 +444,34 @@ body {
 
 .trace-input { display: flex; flex-direction: column; gap: 16px; }
 
+/* === 描图 / 抠图 模式切换（醒目入口） === */
+.mode-switch {
+  display: flex;
+  gap: 4px;
+  background: var(--surface-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  padding: 4px;
+}
+.mode-btn {
+  flex: 1;
+  padding: 9px 12px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 480;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.mode-btn.active {
+  background: var(--primary);   /* selected = 黑色药丸 */
+  color: var(--on-primary);
+}
+
 /* === Upload Zone (surface-soft tile, hairline dashed) === */
 .upload-zone {
   border: 2px dashed var(--hairline);

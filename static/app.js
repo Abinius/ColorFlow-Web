@@ -173,9 +173,16 @@ const traceMode = document.getElementById('traceMode');
 const ignoreWhite = document.getElementById('ignoreWhite');
 const paramHint = document.querySelector('.param-hint');
 
+// 描图 / 抠图 双态切换入口 → 同步 traceMode 下拉
+const modeBtns = document.querySelectorAll('.mode-btn');
+function setModeButtons(mode) {
+  modeBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+}
+
 // 抠图模式：自动输出透明背景，忽略白色开关被接管
 function syncTraceMode() {
   const isCutout = traceMode.value === 'cutout';
+  setModeButtons(traceMode.value);
   ignoreWhite.checked = isCutout;      // 抠图必然透明
   ignoreWhite.disabled = isCutout;
   ignoreWhite.closest('.checkbox-row').style.opacity = isCutout ? '0.55' : '1';
@@ -183,6 +190,12 @@ function syncTraceMode() {
   else if (paramHint) paramHint.textContent = '去除白底，留透明通道';
 }
 traceMode.addEventListener('change', syncTraceMode);
+modeBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    traceMode.value = btn.dataset.mode;
+    syncTraceMode();
+  });
+});
 syncTraceMode();
 
 traceBtn.addEventListener('click', async () => {

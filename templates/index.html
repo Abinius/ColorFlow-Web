@@ -117,6 +117,11 @@
             </div>
             <div class="trace-layout">
               <div class="trace-input">
+                <!-- 描图 / 抠图 模式切换（醒目入口） -->
+                <div class="mode-switch">
+                  <button class="mode-btn active" data-mode="color">矢量描图</button>
+                  <button class="mode-btn" data-mode="cutout">抠图去背景</button>
+                </div>
                 <div class="upload-zone" id="uploadZone">
                   <input type="file" id="traceFile" accept="image/*" hidden />
                   <div class="upload-placeholder">
