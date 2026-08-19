@@ -59,19 +59,41 @@
         </button>
       </nav>
 
-      <div class="sidebar-settings">
-        <div class="sidebar-label">设置 · Settings</div>
-        <div class="api-key-col">
-          <input type="password" id="apiKeyInput" class="api-key-input" placeholder="API Key（可选）" autocomplete="off" />
-          <button class="btn btn-small btn-secondary" id="apiKeyBtn">保存</button>
-        </div>
-      </div>
-
       <footer class="sidebar-footer">
         <span>ColorFlow</span> ·
         <a href="https://github.com/Abinius/ColorFlow" target="_blank">GitHub</a>
+        <button class="icon-btn settings-icon" id="settingsToggle" aria-label="打开设置">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 1a3 3 0 1 1 0-6 3 3 0 0 1 0 6z" fill="currentColor"/><path d="M6.5 1.5l-.5 1.2-1.3.3-.8-1L2.5 3l.3 1.3-1 .8-1.2-.5L0 6l1.2.5.5 1.2-.3 1.3-1 .8L1 11l1.3-.3.8 1 1.2-.5.5-1.2 1.3-.3.8 1L7 14.5l.5-1.2 1.3-.3.8 1L11 13l-.3-1.3 1-.8 1.2.5L14 10l-1.2-.5-.5-1.2.3-1.3 1-.8L13 5l-1.3.3-.8-1-1.2.5-.5 1.2-1.3.3-.8-1L7 1.5z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+        </button>
       </footer>
     </aside>
+
+    <!-- Settings Modal -->
+    <div class="settings-modal" id="settingsModal">
+      <div class="settings-modal-backdrop" id="settingsBackdrop"></div>
+      <div class="settings-modal-container">
+        <div class="settings-modal-header">
+          <h2>设置</h2>
+          <button class="icon-btn" id="settingsClose" aria-label="关闭设置">
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>
+          </button>
+        </div>
+        <div class="settings-modal-body">
+          <div class="settings-panel">
+            <h3>通用设置</h3>
+            <p class="settings-placeholder">更多设置项即将推出...</p>
+          </div>
+          <div class="settings-panel">
+            <h3>API Key 设置</h3>
+            <div class="api-key-col">
+              <label class="settings-label">API Key（可选）</label>
+              <input type="password" id="apiKeyInput" class="api-key-input" placeholder="输入 API Key" autocomplete="off" />
+              <button class="btn btn-small btn-secondary" id="apiKeyBtn">保存</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Right workspace -->
     <main class="workspace">

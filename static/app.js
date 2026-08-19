@@ -54,8 +54,28 @@ if (sidebarToggle) sidebarToggle.addEventListener('click', openSidebar);
 if (sidebarClose) sidebarClose.addEventListener('click', closeSidebar);
 if (scrim) scrim.addEventListener('click', closeSidebar);
 window.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeSidebar();
+  if (e.key === 'Escape') {
+    closeSidebar();
+    closeSettingsModal();
+  }
 });
+
+// === Settings Modal ===
+const settingsModal = document.getElementById('settingsModal');
+const settingsToggle = document.getElementById('settingsToggle');
+const settingsClose = document.getElementById('settingsClose');
+const settingsBackdrop = document.getElementById('settingsBackdrop');
+
+function openSettingsModal() {
+  settingsModal.classList.add('open');
+}
+function closeSettingsModal() {
+  settingsModal.classList.remove('open');
+}
+
+if (settingsToggle) settingsToggle.addEventListener('click', openSettingsModal);
+if (settingsClose) settingsClose.addEventListener('click', closeSettingsModal);
+if (settingsBackdrop) settingsBackdrop.addEventListener('click', closeSettingsModal);
 
 // === Tab Navigation ===
 document.querySelectorAll('.tab').forEach(tab => {
