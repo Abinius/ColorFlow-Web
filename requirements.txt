@@ -2,3 +2,5 @@ flask>=3.0.0
 mcp-print>=0.1.0
 colorflow-sdk @ git+https://github.com/Abinius/ColorFlow.git
 fastmcp>=2.0.0
+# 抠图功能（Web 端「抠图 (Cutout)」模式）；国内安装可加 -i https://pypi.tuna.tsinghua.edu.cn/simple
+rembg[cpu]>=2.0.0

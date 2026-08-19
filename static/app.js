@@ -169,6 +169,22 @@ function handleFile(file) {
   reader.readAsDataURL(file);
 }
 
+const traceMode = document.getElementById('traceMode');
+const ignoreWhite = document.getElementById('ignoreWhite');
+const paramHint = document.querySelector('.param-hint');
+
+// 抠图模式：自动输出透明背景，忽略白色开关被接管
+function syncTraceMode() {
+  const isCutout = traceMode.value === 'cutout';
+  ignoreWhite.checked = isCutout;      // 抠图必然透明
+  ignoreWhite.disabled = isCutout;
+  ignoreWhite.closest('.checkbox-row').style.opacity = isCutout ? '0.55' : '1';
+  if (isCutout && paramHint) paramHint.textContent = '抠图自动透明背景';
+  else if (paramHint) paramHint.textContent = '去除白底，留透明通道';
+}
+traceMode.addEventListener('change', syncTraceMode);
+syncTraceMode();
+
 traceBtn.addEventListener('click', async () => {
   if (!traceFile.files[0]) return;
   traceBtn.disabled = true;

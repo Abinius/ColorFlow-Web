@@ -193,18 +193,35 @@ def index():
     return render_template("index.html")
 
 
-@app.route("/api/trace", methods=["POST"])
-def trace_image():
-    """位图 → SVG 矢量描图"""
-    upload, err = _get_uploaded_image()
-    if err:
-        return err
+# VTracer mode 只接受 color / grey / human；抠图模式内部强制走 color 描图
+_TRACE_SDK_KEYS = (
+    "filter_speckle",
+    "color_precision",
+    "layer_difference",
+    "corner_threshold",
+    "path_precision",
+)
 
-    image_bytes, image_format = upload
-    params = _trace_parameters()
-    ignore_white = params.pop("ignore_white", False)  # 后端专用，不传给 SDK
 
-    try:
+def _trace_svg(image_bytes, image_format, params):
+    """按参数生成 SVG 字节：mode=cutout 走 rembg 抠图+描图，否则走 VTracer 描图。
+
+    抠图时自动去除白色底层路径（rembg 输出为透明底 PNG，SDK 会先合成白底再
+    描图，需后处理去掉白底），因此忽略 ignore_white 开关（必然透明）。
+    """
+    mode = params.get("mode", "color")
+    ignore_white = params.pop("ignore_white", False)
+
+    if mode == "cutout":
+        trace_kwargs = {k: params[k] for k in _TRACE_SDK_KEYS if k in params}
+        trace_kwargs["mode"] = "color"  # VTracer 不接受 cutout
+        svg_bytes = sdk.cutout_then_trace_bytes(
+            image_bytes,
+            model="silueta",  # 轻量模型，质量/速度均衡；可扩展 UI 选择
+            **trace_kwargs,
+        )
+        return _strip_white_paths(svg_bytes), True  # 抠图恒透明
+    else:
         svg_bytes = sdk.trace_bytes(
             image_bytes,
             image_format=image_format,
@@ -212,6 +229,21 @@ def trace_image():
         )
         if ignore_white:
             svg_bytes = _strip_white_paths(svg_bytes)
+        return svg_bytes, False
+
+
+@app.route("/api/trace", methods=["POST"])
+def trace_image():
+    """位图 → SVG 矢量描图（mode=cutout 时为抠图）"""
+    upload, err = _get_uploaded_image()
+    if err:
+        return err
+
+    image_bytes, image_format = upload
+    params = _trace_parameters()
+
+    try:
+        svg_bytes, _is_cutout = _trace_svg(image_bytes, image_format, params)
         # Return as base64 for easier JS handling
         b64 = base64.b64encode(svg_bytes).decode("utf-8")
         return jsonify(
@@ -236,16 +268,9 @@ def trace_colors():
 
     image_bytes, image_format = upload
     params = _trace_parameters()
-    ignore_white = params.pop("ignore_white", False)  # 后端专用，不传给 SDK
 
     try:
-        svg_bytes = sdk.trace_bytes(
-            image_bytes,
-            image_format=image_format,
-            **params,
-        )
-        if ignore_white:
-            svg_bytes = _strip_white_paths(svg_bytes)
+        svg_bytes, _is_cutout = _trace_svg(image_bytes, image_format, params)
     except ValidationError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
