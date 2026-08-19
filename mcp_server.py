@@ -585,5 +585,118 @@ def trace_and_match(
     )
 
 
+# ============================================================
+# Pantone 色卡 / 匹配报告 PDF 导出
+# ============================================================
+
+
+@mcp.tool()
+def export_pantone_pdf(
+    export_type: str = "swatch",
+    name: str = "",
+    hex_color: str = "#000000",
+    cmyk: list = None,
+    rgb: list = None,
+    input_hex: str = "",
+    matches: list = None,
+) -> str:
+    """生成 Pantone 色卡或匹配报告 PDF（CMYK，印刷级）。
+
+    Args:
+        export_type: 导出类型 — swatch（单个色卡）| report（匹配报告）
+        name: 色卡模式下的 Pantone 色号名称
+        hex_color: 色卡模式下的 HEX 值（如 "#DA291C"）
+        cmyk: 色卡模式下的 CMYK 值 [c, m, y, k]
+        rgb: 色卡模式下的 RGB 值 [r, g, b]
+        input_hex: 报告模式下的输入色 HEX
+        matches: 报告模式下的匹配列表 [{name, hex, cmyk, delta_e}]
+    Returns:
+        JSON: {success, pdf_path}
+    """
+    auth = _auth_check()
+    if auth:
+        return auth
+    if cmyk is None:
+        cmyk = [0, 0, 0, 100]
+    if rgb is None:
+        rgb = [0, 0, 0]
+    if matches is None:
+        matches = []
+    try:
+        import tempfile
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.colors import CMYKColor, Color
+        from reportlab.pdfgen import canvas
+        from PIL import Image as _PILImage
+
+        def _hex_to_cmyk(h):
+            h = h.lstrip("#")
+            r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+            c = _PILImage.new("RGB", (1, 1), (r, g, b)).convert("CMYK").load()[0, 0]
+            return CMYKColor(c[0] / 255, c[1] / 255, c[2] / 255, c[3] / 255)
+
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            pdf_path = tmp.name
+        c = canvas.Canvas(pdf_path, pagesize=A4)
+        page_w, page_h = A4
+
+        if export_type == "swatch":
+            swatch_x, swatch_y = 50, page_h - 250
+            c.setFillColor(_hex_to_cmyk(hex_color))
+            c.rect(swatch_x, swatch_y, 180, 180, fill=1, stroke=0)
+            text_x = swatch_x + 210
+            text_y = swatch_y + 160
+            c.setFillColor(Color(0, 0, 0))
+            c.setFont("Helvetica-Bold", 20)
+            c.drawString(text_x, text_y, name)
+            c.setFont("Helvetica", 12)
+            c.drawString(text_x, text_y - 30, "HEX    " + hex_color.upper())
+            c.drawString(text_x, text_y - 50, "CMYK   {} / {} / {} / {}".format(*cmyk))
+            c.drawString(text_x, text_y - 70, "RGB    {} / {} / {}".format(*rgb))
+            c.setFont("Helvetica", 9)
+            c.setFillColor(Color(0.5, 0.5, 0.5))
+            c.drawString(50, 40, "ColorFlow · 色卡规格")
+
+        elif export_type == "report":
+            c.setFillColor(Color(0, 0, 0))
+            c.setFont("Helvetica-Bold", 18)
+            c.drawString(50, page_h - 60, "色彩匹配报告")
+            c.setFillColor(_hex_to_cmyk(input_hex))
+            c.rect(50, page_h - 160, 60, 60, fill=1, stroke=0)
+            c.setFillColor(Color(0, 0, 0))
+            c.setFont("Helvetica", 12)
+            c.drawString(125, page_h - 110, "输入色 " + input_hex.upper())
+            y = page_h - 200
+            c.setFont("Helvetica-Bold", 11)
+            c.drawString(50, y, "色块")
+            c.drawString(120, y, "Pantone")
+            c.drawString(330, y, "HEX")
+            c.drawString(430, y, "ΔE")
+            y -= 6
+            c.setStrokeColor(Color(0.8, 0.8, 0.8))
+            c.line(50, y, page_w - 50, y)
+            y -= 25
+            for m in matches:
+                c.setFillColor(_hex_to_cmyk(m.get("hex", "#000000")))
+                c.rect(50, y - 14, 50, 20, fill=1, stroke=0)
+                c.setFillColor(Color(0, 0, 0))
+                c.setFont("Helvetica", 11)
+                c.drawString(120, y - 8, m.get("name", ""))
+                c.drawString(330, y - 8, m.get("hex", "").upper())
+                c.drawString(430, y - 8, str(m.get("delta_e", 0)))
+                y -= 35
+            c.setFont("Helvetica", 9)
+            c.setFillColor(Color(0.5, 0.5, 0.5))
+            c.drawString(50, 40, "ColorFlow · 色彩匹配报告 · 输入色 " + input_hex.upper())
+
+        else:
+            return json.dumps({"error": "export_type 必须是 swatch 或 report"}, ensure_ascii=False)
+
+        c.save()
+        return json.dumps({"success": True, "pdf_path": pdf_path}, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": f"导出失败: {e}"}, ensure_ascii=False)
+
+
 if __name__ == "__main__":
     mcp.run()

@@ -17,6 +17,7 @@ def test_all_tools_registered():
     assert callable(ms.cutout_then_trace)
     assert callable(ms.pantone_lookup)
     assert callable(ms.pantone_colors)
+    assert callable(ms.export_pantone_pdf)
     assert len([x for x in dir(ms) if callable(getattr(ms, x)) and not x.startswith("_")]) >= 9
 
 
@@ -165,3 +166,32 @@ class TestExportPrint:
                                            filter_speckle=4))
         assert data["success"] is True
         assert data["pdf_path"]
+
+
+class TestExportPantonePdf:
+    def test_swatch(self):
+        data = json.loads(ms.export_pantone_pdf(
+            export_type="swatch",
+            name="485 C",
+            hex_color="#DA291C",
+            cmyk=[0, 85, 95, 5],
+            rgb=[218, 41, 28],
+        ))
+        assert data["success"] is True
+        assert data["pdf_path"]
+
+    def test_report(self):
+        data = json.loads(ms.export_pantone_pdf(
+            export_type="report",
+            input_hex="#DA291C",
+            matches=[
+                {"name": "485 C", "hex": "#DA291C", "cmyk": [0, 85, 95, 5], "delta_e": 0.32},
+                {"name": "186 C", "hex": "#C8102E", "cmyk": [0, 90, 95, 20], "delta_e": 3.15},
+            ],
+        ))
+        assert data["success"] is True
+        assert data["pdf_path"]
+
+    def test_invalid_type(self):
+        data = json.loads(ms.export_pantone_pdf(export_type="invalid"))
+        assert data.get("error")
