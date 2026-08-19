@@ -3,7 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#ffffff" />
   <title>ColorFlow</title>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="48x48" href="/static/favicon-48x48.png" />
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <link rel="apple-touch-icon" sizes="152x152" href="/static/apple-touch-icon-152x152.png" />
+  <link rel="apple-touch-icon" sizes="167x167" href="/static/apple-touch-icon-167x167.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon-180x180.png" />
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
+  <link rel="apple-touch-icon-precomposed" href="/static/apple-touch-icon.png" />
+  <link rel="apple-touch-startup-image" href="/static/apple-touch-icon-152x152.png" />
+  <link rel="mask-icon" href="/static/safari-pinned-tab.svg" color="#24423b" />
+  <link rel="manifest" href="/static/site.webmanifest" />
+  <meta name="msapplication-TileColor" content="#24423b" />
+  <meta name="msapplication-config" content="/static/browserconfig.xml" />
+
   <link rel="stylesheet" href="/static/style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,320..700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet" />
 </head>
@@ -130,6 +149,61 @@
                   </div>
                   <img id="cutoutPreviewImg" class="preview-img hidden" />
                 </div>
+                <div class="params cutout-params">
+                  <div class="param-row">
+                    <label>抠图模型</label>
+                    <select id="cutoutModel">
+                      <option value="silueta">通用快速（默认）</option>
+                      <option value="u2net">通用标准</option>
+                      <option value="u2net_human_seg">人像精细</option>
+                      <option value="u2netp">人像快速</option>
+                      <option value="dis_anime">二次元</option>
+                      <option value="dis_general_use">通用高精度</option>
+                      <option value="withoutbg">通用快速高精度</option>
+                      <option value="bria-rmbg">通用高精细</option>
+                    </select>
+                  </div>
+                  <div class="param-row param-row-checkbox">
+                    <label class="checkbox-row">
+                      <input type="checkbox" id="cutoutAdvancedToggle" />
+                      <span>展开高级设置</span>
+                    </label>
+                  </div>
+                  <div class="advanced-params hidden" id="cutoutAdvanced">
+                    <div class="param-row param-row-checkbox">
+                      <label class="checkbox-row">
+                        <input type="checkbox" id="cutoutAlphaMatting" />
+                        <span>精细抠边（发丝/半透明）</span>
+                      </label>
+                    </div>
+                    <div class="am-thresholds hidden" id="cutoutAMThresholds">
+                      <div class="param-row">
+                        <label>前景阈值: <span id="cutoutAMFGVal">240</span></label>
+                        <input type="range" id="cutoutAMFG" min="10" max="255" value="240" />
+                      </div>
+                      <div class="param-row">
+                        <label>背景阈值: <span id="cutoutAMBGVal">10</span></label>
+                        <input type="range" id="cutoutAMBG" min="0" max="245" value="10" />
+                      </div>
+                      <div class="param-row">
+                        <label>腐蚀大小: <span id="cutoutAMErodeVal">10</span></label>
+                        <input type="range" id="cutoutAMErode" min="1" max="20" value="10" />
+                      </div>
+                    </div>
+                    <div class="param-row param-row-checkbox">
+                      <label class="checkbox-row">
+                        <input type="checkbox" id="cutoutDecontaminate" />
+                        <span>清除边缘色晕</span>
+                      </label>
+                    </div>
+                    <div class="param-row param-row-checkbox">
+                      <label class="checkbox-row">
+                        <input type="checkbox" id="cutoutPostProcess" />
+                        <span>二值掩码去噪</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
                 <button class="btn btn-primary" id="cutoutBtn" disabled>
                   <span class="btn-text">开始抠图</span>
                   <span class="btn-loader hidden">抠图中...</span>
@@ -175,11 +249,44 @@
                   <div class="param-row">
                     <label>描图模式</label>
                     <select id="traceMode">
-                      <option value="color" selected>彩色 (Color)</option>
-                      <option value="grey">灰度 (Grey)</option>
-                      <option value="human">人像 (Human)</option>
-                      <option value="cutout">抠图 (Cutout)</option>
+                      <option value="color" selected>彩色</option>
+                      <option value="grey">灰度</option>
+                      <option value="human">人像</option>
+                      <option value="cutout">抠图</option>
                     </select>
+                  </div>
+                  <div class="param-row">
+                    <label>颜色深度</label>
+                    <select id="traceColormode">
+                      <option value="rgb8" selected>RGB 8-bit（默认）</option>
+                      <option value="rgb16">RGB 16-bit</option>
+                      <option value="mono">二值化</option>
+                      <option value="grey">8-bit 灰度</option>
+                      <option value="grey16">16-bit 灰度</option>
+                    </select>
+                  </div>
+                  <div class="param-row">
+                    <label>输出层级</label>
+                    <select id="traceHierarchical">
+                      <option value="stacked" selected>堆叠</option>
+                      <option value="flat">平面化</option>
+                    </select>
+                  </div>
+                  <div class="param-row">
+                    <label>颜色精度: <span id="colorPrecisionVal">6</span></label>
+                    <input type="range" id="colorPrecision" min="1" max="16" value="6" />
+                  </div>
+                  <div class="param-row">
+                    <label>图层距离: <span id="layerDifferenceVal">64</span></label>
+                    <input type="range" id="layerDifference" min="1" max="128" value="64" />
+                  </div>
+                  <div class="param-row">
+                    <label>角点阈值: <span id="cornerThresholdVal">60</span></label>
+                    <input type="range" id="cornerThreshold" min="1" max="180" value="60" />
+                  </div>
+                  <div class="param-row">
+                    <label>最小路径: <span id="lengthThresholdVal">2.0</span></label>
+                    <input type="range" id="lengthThreshold" min="0.1" max="10" step="0.1" value="2.0" />
                   </div>
                   <div class="param-row">
                     <label>斑点过滤: <span id="speckleVal">4</span></label>
@@ -190,12 +297,58 @@
                     <input type="range" id="pathPrecision" min="1" max="16" value="7" />
                   </div>
                   <div class="param-row param-row-checkbox">
-                    <label>忽略白色</label>
                     <label class="checkbox-row">
                       <input type="checkbox" id="ignoreWhite" />
                       <span>输出透明背景</span>
                     </label>
                     <span class="param-hint">去除白底，留透明通道</span>
+                  </div>
+                  <div class="cutout-params-trace hidden" id="traceCutoutParams">
+                    <div class="param-row">
+                      <label>抠图模型</label>
+                      <select id="traceCutoutModel">
+                        <option value="silueta">通用快速（默认）</option>
+                        <option value="u2net">通用标准</option>
+                        <option value="u2net_human_seg">人像精细</option>
+                        <option value="u2netp">人像快速</option>
+                        <option value="dis_anime">二次元</option>
+                        <option value="dis_general_use">通用高精度</option>
+                        <option value="withoutbg">通用快速高精度</option>
+                        <option value="bria-rmbg">通用高精细</option>
+                      </select>
+                    </div>
+                    <div class="param-row param-row-checkbox">
+                      <label class="checkbox-row">
+                        <input type="checkbox" id="traceCutoutAM" />
+                        <span>精细抠边（发丝/半透明）</span>
+                      </label>
+                    </div>
+                    <div class="am-thresholds hidden" id="traceCutoutAMThresholds">
+                      <div class="param-row">
+                        <label>前景阈值: <span id="traceCutoutAMFGVal">240</span></label>
+                        <input type="range" id="traceCutoutAMFG" min="10" max="255" value="240" />
+                      </div>
+                      <div class="param-row">
+                        <label>背景阈值: <span id="traceCutoutAMBGVal">10</span></label>
+                        <input type="range" id="traceCutoutAMBG" min="0" max="245" value="10" />
+                      </div>
+                      <div class="param-row">
+                        <label>腐蚀大小: <span id="traceCutoutAMErodeVal">10</span></label>
+                        <input type="range" id="traceCutoutAMErode" min="1" max="20" value="10" />
+                      </div>
+                    </div>
+                    <div class="param-row param-row-checkbox">
+                      <label class="checkbox-row">
+                        <input type="checkbox" id="traceCutoutDecontaminate" />
+                        <span>清除边缘色晕</span>
+                      </label>
+                    </div>
+                    <div class="param-row param-row-checkbox">
+                      <label class="checkbox-row">
+                        <input type="checkbox" id="traceCutoutPostProcess" />
+                        <span>二值掩码去噪</span>
+                      </label>
+                    </div>
                   </div>
                 </div>
                 <button class="btn btn-primary" id="traceBtn" disabled>

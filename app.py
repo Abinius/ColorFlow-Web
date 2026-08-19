@@ -116,15 +116,39 @@ def _get_uploaded_image():
 
 
 def _trace_parameters():
-    """从表单读取描图参数（非法数值回退默认值）"""
+    """从表单读取描图参数（非法值回退默认值）"""
+    # mode 由 SDK 校验（仅接受 color/grey/human），非法值由 SDK 抛 ValidationError → 400
+    mode = request.form.get("mode", "color").strip() or "color"
+
+    colormode = request.form.get("colormode", "rgb8").strip() or "rgb8"
+    VALID_COLORMODES = ("rgb8", "rgb16", "mono", "grey", "grey16")
+    if colormode not in VALID_COLORMODES:
+        colormode = "rgb8"
+
+    hierarchical = request.form.get("hierarchical", "stacked").strip() or "stacked"
+    VALID_HIER = ("flat", "stacked")
+    if hierarchical not in VALID_HIER:
+        hierarchical = "stacked"
+
+    lt_raw = request.form.get("length_threshold", "").strip()
+    if lt_raw == "":
+        length_threshold = 2.0
+    else:
+        try:
+            length_threshold = max(0.1, min(100.0, float(lt_raw)))
+        except (ValueError, TypeError):
+            length_threshold = 2.0
+
     return {
-        "mode": request.form.get("mode", "color"),
+        "mode": mode,
+        "colormode": colormode,
+        "hierarchical": hierarchical,
+        "length_threshold": length_threshold,
         "filter_speckle": _int_arg(request.form.get("filter_speckle"), 4),
         "color_precision": _int_arg(request.form.get("color_precision"), 6),
         "layer_difference": _int_arg(request.form.get("layer_difference"), 64),
         "corner_threshold": _int_arg(request.form.get("corner_threshold"), 60),
         "path_precision": _int_arg(request.form.get("path_precision"), 7),
-        # 后端专用开关（不传给 SDK）：描图后去除白色 / 近白 fill 路径，使 SVG 透明
         "ignore_white": request.form.get("ignore_white", "0") in ("1", "true", "yes"),
     }
 
@@ -194,12 +218,16 @@ def index():
 
 
 # VTracer mode 只接受 color / grey / human；抠图模式内部强制走 color 描图
+# colormode 已加入透传：SDK 在输入侧用 ImageOps 补偿（灰度/二值/posterize）
 _TRACE_SDK_KEYS = (
     "filter_speckle",
     "color_precision",
     "layer_difference",
     "corner_threshold",
     "path_precision",
+    "colormode",
+    "hierarchical",
+    "length_threshold",
 )
 
 
@@ -215,8 +243,10 @@ def _trace_svg(image_bytes, image_format, params):
     if mode == "cutout":
         trace_kwargs = {k: params[k] for k in _TRACE_SDK_KEYS if k in params}
         trace_kwargs["mode"] = "color"  # VTracer 不接受 cutout
-        # 复用缓存 session 抠图 → 透明 RGBA；VTracer 忽略 alpha，需先合成白底
-        rgba = _rembg_cutout(image_bytes, model="silueta")
+        # 抠图精度参数
+        cutout_params = _cutout_parameters()
+        cutout_model = cutout_params.pop("model", "silueta")
+        rgba = _rembg_cutout(image_bytes, model=cutout_model, **cutout_params)
         import io as _bio
 
         flat = _bio.BytesIO()
@@ -247,31 +277,71 @@ def _trace_svg(image_bytes, image_format, params):
 # 解决：全局缓存 rembg session，模型只加载一次，后续请求直接复用。
 import threading as _threading
 
-_rembg_session = None
+_rembg_sessions: dict = {}
 _rembg_session_lock = _threading.Lock()
 
 
 def _get_rembg_session(model="silueta"):
-    """获取（并缓存）rembg session，避免每次请求重新加载模型"""
-    global _rembg_session
-    if _rembg_session is None:
-        with _rembg_session_lock:
-            if _rembg_session is None:
-                from rembg import new_session
+    """获取（并缓存）rembg session，按模型名分表缓存，避免每次请求重新加载"""
+    with _rembg_session_lock:
+        if model not in _rembg_sessions:
+            from rembg import new_session
 
-                _rembg_session = new_session(model)
-    return _rembg_session
+            _rembg_sessions[model] = new_session(model)
+    return _rembg_sessions[model]
 
 
-def _rembg_cutout(image_bytes, model="silueta"):
-    """位图字节 → rembg 抠图 → 透明底 RGBA PIL Image（复用缓存 session）"""
+def _rembg_cutout(image_bytes, model="silueta", **kwargs):
+    """位图字节 → rembg 抠图 → 透明底 RGBA PIL Image（复用缓存 session，精度参数透传）"""
     import io as _bio
 
     from rembg import remove as _rembg_remove
 
     session = _get_rembg_session(model)
-    result = _rembg_remove(image_bytes, session=session)
+    result = _rembg_remove(image_bytes, session=session, **kwargs)
     return _bio_open_rgba(result)
+
+
+# rembg 支持的模型（按场景分类，前端用于下拉选择）
+REMBG_MODELS = [
+    ("silueta", "通用 · 快速 (默认)"),
+    ("u2net", "通用 · 标准"),
+    ("u2net_human_seg", "人像 · 精细"),
+    ("u2netp", "人像 · 快速"),
+    ("dis_anime", "二次元"),
+    ("dis_general_use", "通用 · 高精度"),
+    ("withoutbg", "通用 · 快速高精度"),
+    ("bria-rmbg", "通用 · 高精度 (rembg 推荐)"),
+]
+
+
+def _cutout_parameters():
+    """从表单读取抠图精度参数（非法值回退 rembg 默认值）"""
+    # 模型名校验：非法模型回退 silueta（已随包附带，无需下载）
+    model = request.form.get("model", "silueta").strip() or "silueta"
+    VALID_REMBG_MODELS = {m[0] for m in REMBG_MODELS}
+    if model not in VALID_REMBG_MODELS:
+        model = "silueta"
+
+    params = {
+        "model": model,
+        "alpha_matting": request.form.get("alpha_matting", "0") in ("1", "true", "yes"),
+        "alpha_matting_foreground_threshold": _int_arg(
+            request.form.get("alpha_matting_foreground_threshold"), 240
+        ),
+        "alpha_matting_background_threshold": _int_arg(
+            request.form.get("alpha_matting_background_threshold"), 10
+        ),
+        "alpha_matting_erode_size": _int_arg(
+            request.form.get("alpha_matting_erode_size"), 10
+        ),
+        "decontaminate": request.form.get("decontaminate", "0") in ("1", "true", "yes"),
+        "post_process_mask": request.form.get("post_process_mask", "0") in ("1", "true", "yes"),
+    }
+    params["alpha_matting_foreground_threshold"] = max(10, min(255, params["alpha_matting_foreground_threshold"]))
+    params["alpha_matting_background_threshold"] = max(0, min(245, params["alpha_matting_background_threshold"]))
+    params["alpha_matting_erode_size"] = max(1, min(20, params["alpha_matting_erode_size"]))
+    return params
 
 
 def _bio_open_rgba(data):
@@ -291,12 +361,15 @@ def cutout_api():
 
     image_bytes, _image_format = upload
 
+    params = _cutout_parameters()
+    model = params.pop("model", "silueta")
+
     try:
         import io as _b
 
         from PIL import Image
 
-        rgba = _rembg_cutout(image_bytes)  # 复用缓存 session
+        rgba = _rembg_cutout(image_bytes, model=model, **params)  # 复用缓存 session + 精度参数
         buf = _b.BytesIO()
         rgba.save(buf, format="PNG")
         png_bytes = buf.getvalue()
@@ -307,6 +380,7 @@ def cutout_api():
                 "size": len(png_bytes),
                 "width": rgba.width,
                 "height": rgba.height,
+                "model": model,
             }
         )
     except ValidationError as e:

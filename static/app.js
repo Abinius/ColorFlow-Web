@@ -173,6 +173,14 @@ cutoutBtn.addEventListener('click', async () => {
 
   const formData = new FormData();
   formData.append('image', cutoutFile.files[0]);
+  // 抠图精度参数
+  formData.append('model', document.getElementById('cutoutModel').value);
+  formData.append('alpha_matting', document.getElementById('cutoutAlphaMatting').checked ? '1' : '0');
+  formData.append('alpha_matting_foreground_threshold', document.getElementById('cutoutAMFG').value);
+  formData.append('alpha_matting_background_threshold', document.getElementById('cutoutAMBG').value);
+  formData.append('alpha_matting_erode_size', document.getElementById('cutoutAMErode').value);
+  formData.append('decontaminate', document.getElementById('cutoutDecontaminate').checked ? '1' : '0');
+  formData.append('post_process_mask', document.getElementById('cutoutPostProcess').checked ? '1' : '0');
 
   try {
     const resp = await apiFetch('/api/cutout', { method: 'POST', body: formData });
@@ -181,7 +189,8 @@ cutoutBtn.addEventListener('click', async () => {
       currentCutoutBase64 = data.png_base64;
       cutoutPreview.innerHTML = `<img src="data:image/png;base64,${data.png_base64}" alt="抠图结果" />`;
       cutoutInfo.classList.remove('hidden');
-      cutoutSize.textContent = `${(data.size / 1024).toFixed(1)} KB · ${data.width}×${data.height}`;
+      const modelLabel = data.model ? ` · ${data.model}` : '';
+      cutoutSize.textContent = `${(data.size / 1024).toFixed(1)} KB · ${data.width}×${data.height}${modelLabel}`;
     } else {
       cutoutPreview.innerHTML = `<div class="svg-placeholder" style="color:var(--error)">错误: ${escapeHtml(data.error)}</div>`;
     }
@@ -202,6 +211,32 @@ cutoutDownload.addEventListener('click', () => {
   a.click();
 });
 
+// === Cutout 精度面板交互 ===
+const cutoutAdvancedToggle = document.getElementById('cutoutAdvancedToggle');
+const cutoutAdvanced = document.getElementById('cutoutAdvanced');
+const cutoutAlphaMatting = document.getElementById('cutoutAlphaMatting');
+const cutoutAMThresholds = document.getElementById('cutoutAMThresholds');
+const cutoutAMFG = document.getElementById('cutoutAMFG');
+const cutoutAMFGVal = document.getElementById('cutoutAMFGVal');
+const cutoutAMBG = document.getElementById('cutoutAMBG');
+const cutoutAMBGVal = document.getElementById('cutoutAMBGVal');
+const cutoutAMErode = document.getElementById('cutoutAMErode');
+const cutoutAMErodeVal = document.getElementById('cutoutAMErodeVal');
+
+if (cutoutAdvancedToggle) {
+  cutoutAdvancedToggle.addEventListener('change', () => {
+    cutoutAdvanced.classList.toggle('hidden', !cutoutAdvancedToggle.checked);
+  });
+}
+if (cutoutAlphaMatting) {
+  cutoutAlphaMatting.addEventListener('change', () => {
+    cutoutAMThresholds.classList.toggle('hidden', !cutoutAlphaMatting.checked);
+  });
+}
+if (cutoutAMFG) cutoutAMFG.addEventListener('input', () => { cutoutAMFGVal.textContent = cutoutAMFG.value; });
+if (cutoutAMBG) cutoutAMBG.addEventListener('input', () => { cutoutAMBGVal.textContent = cutoutAMBG.value; });
+if (cutoutAMErode) cutoutAMErode.addEventListener('input', () => { cutoutAMErodeVal.textContent = cutoutAMErode.value; });
+
 // === Vector Trace ===
 const uploadZone = document.getElementById('uploadZone');
 const traceFile = document.getElementById('traceFile');
@@ -214,11 +249,23 @@ const filterSpeckle = document.getElementById('filterSpeckle');
 const speckleVal = document.getElementById('speckleVal');
 const pathPrecision = document.getElementById('pathPrecision');
 const precisionVal = document.getElementById('precisionVal');
+const colorPrecision = document.getElementById('colorPrecision');
+const colorPrecisionVal = document.getElementById('colorPrecisionVal');
+const layerDifference = document.getElementById('layerDifference');
+const layerDifferenceVal = document.getElementById('layerDifferenceVal');
+const cornerThreshold = document.getElementById('cornerThreshold');
+const cornerThresholdVal = document.getElementById('cornerThresholdVal');
+const lengthThreshold = document.getElementById('lengthThreshold');
+const lengthThresholdVal = document.getElementById('lengthThresholdVal');
 
 let currentSvgBase64 = null;
 
 filterSpeckle.addEventListener('input', () => speckleVal.textContent = filterSpeckle.value);
 pathPrecision.addEventListener('input', () => precisionVal.textContent = pathPrecision.value);
+colorPrecision.addEventListener('input', () => colorPrecisionVal.textContent = colorPrecision.value);
+layerDifference.addEventListener('input', () => layerDifferenceVal.textContent = layerDifference.value);
+cornerThreshold.addEventListener('input', () => cornerThresholdVal.textContent = cornerThreshold.value);
+lengthThreshold.addEventListener('input', () => lengthThresholdVal.textContent = lengthThreshold.value);
 
 uploadZone.addEventListener('click', () => traceFile.click());
 uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
@@ -274,6 +321,9 @@ function syncTraceMode() {
   ignoreWhite.closest('.checkbox-row').style.opacity = isCutout ? '0.55' : '1';
   if (isCutout && paramHint) paramHint.textContent = '抠图自动透明背景';
   else if (paramHint) paramHint.textContent = '去除白底，留透明通道';
+  // 抠图精度面板：仅 mode=cutout 时显示
+  const traceCutoutParams = document.getElementById('traceCutoutParams');
+  if (traceCutoutParams) traceCutoutParams.classList.toggle('hidden', !isCutout);
 }
 traceMode.addEventListener('change', syncTraceMode);
 modeBtns.forEach(btn => {
@@ -294,8 +344,23 @@ traceBtn.addEventListener('click', async () => {
   formData.append('image', traceFile.files[0]);
   formData.append('mode', document.getElementById('traceMode').value);
   formData.append('filter_speckle', filterSpeckle.value);
+  formData.append('color_precision', colorPrecision.value);
+  formData.append('layer_difference', layerDifference.value);
+  formData.append('corner_threshold', cornerThreshold.value);
   formData.append('path_precision', pathPrecision.value);
   formData.append('ignore_white', document.getElementById('ignoreWhite').checked ? '1' : '0');
+  formData.append('colormode', document.getElementById('traceColormode').value);
+  formData.append('hierarchical', document.getElementById('traceHierarchical').value);
+  formData.append('length_threshold', document.getElementById('lengthThreshold').value);
+  if (document.getElementById('traceMode').value === 'cutout') {
+    formData.append('model', document.getElementById('traceCutoutModel').value);
+    formData.append('alpha_matting', document.getElementById('traceCutoutAM').checked ? '1' : '0');
+    formData.append('alpha_matting_foreground_threshold', document.getElementById('traceCutoutAMFG').value);
+    formData.append('alpha_matting_background_threshold', document.getElementById('traceCutoutAMBG').value);
+    formData.append('alpha_matting_erode_size', document.getElementById('traceCutoutAMErode').value);
+    formData.append('decontaminate', document.getElementById('traceCutoutDecontaminate').checked ? '1' : '0');
+    formData.append('post_process_mask', document.getElementById('traceCutoutPostProcess').checked ? '1' : '0');
+  }
 
   try {
     const resp = await apiFetch('/api/trace', { method: 'POST', body: formData });
@@ -389,8 +454,23 @@ colorMatchBtn.addEventListener('click', async () => {
   formData.append('image', traceFile.files[0]);
   formData.append('mode', document.getElementById('traceMode').value);
   formData.append('filter_speckle', filterSpeckle.value);
+  formData.append('color_precision', colorPrecision.value);
+  formData.append('layer_difference', layerDifference.value);
+  formData.append('corner_threshold', cornerThreshold.value);
   formData.append('path_precision', pathPrecision.value);
   formData.append('ignore_white', document.getElementById('ignoreWhite').checked ? '1' : '0');
+  formData.append('colormode', document.getElementById('traceColormode').value);
+  formData.append('hierarchical', document.getElementById('traceHierarchical').value);
+  formData.append('length_threshold', document.getElementById('lengthThreshold').value);
+  if (document.getElementById('traceMode').value === 'cutout') {
+    formData.append('model', document.getElementById('traceCutoutModel').value);
+    formData.append('alpha_matting', document.getElementById('traceCutoutAM').checked ? '1' : '0');
+    formData.append('alpha_matting_foreground_threshold', document.getElementById('traceCutoutAMFG').value);
+    formData.append('alpha_matting_background_threshold', document.getElementById('traceCutoutAMBG').value);
+    formData.append('alpha_matting_erode_size', document.getElementById('traceCutoutAMErode').value);
+    formData.append('decontaminate', document.getElementById('traceCutoutDecontaminate').checked ? '1' : '0');
+    formData.append('post_process_mask', document.getElementById('traceCutoutPostProcess').checked ? '1' : '0');
+  }
 
   try {
     const resp = await apiFetch('/api/trace/colors', { method: 'POST', body: formData });
