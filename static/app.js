@@ -11,28 +11,138 @@ function gradeClass(de) {
 }
 
 // === API Key：localStorage 持久化 + 自动附带 x-api-key 头 ===
-const apiKeyInput = document.getElementById('apiKeyInput');
-const apiKeyBtn = document.getElementById('apiKeyBtn');
-
-apiKeyInput.value = localStorage.getItem('colorflow_api_key') || '';
-apiKeyBtn.addEventListener('click', () => {
-  const key = apiKeyInput.value.trim();
-  if (key) {
-    localStorage.setItem('colorflow_api_key', key);
-    apiKeyBtn.textContent = '✓ 已保存';
-  } else {
-    localStorage.removeItem('colorflow_api_key');
-    apiKeyBtn.textContent = '已清除';
-  }
-  setTimeout(() => { apiKeyBtn.textContent = '保存'; }, 1200);
-});
-
 function apiFetch(url, options = {}) {
   const headers = new Headers(options.headers || {});
   const key = localStorage.getItem('colorflow_api_key');
   if (key) headers.set('x-api-key', key);
   options.headers = headers;
   return fetch(url, options);
+}
+
+// === Key 管理函数 ===
+async function loadKeyList() {
+  const list = document.getElementById('keyList');
+  if (!list) return;
+  try {
+    const resp = await apiFetch('/api/keys');
+    const data = await resp.json();
+    if (!data.success || !data.keys || data.keys.length === 0) {
+      list.innerHTML = '<div class="key-empty">暂无 Key · 点击上方按钮生成</div>';
+      return;
+    }
+    list.innerHTML = data.keys.map(k => {
+      const name = escapeHtml(k.name);
+      const masked = escapeHtml(k.key_masked);
+      const created = escapeHtml(k.created_at || '');
+      const lastUsed = k.last_used ? escapeHtml(k.last_used) : '未使用';
+      return `<div class="key-card">
+        <div class="key-card-name">${name}</div>
+        <div class="key-card-value">${masked}</div>
+        <div class="key-card-meta">
+          <span>创建: ${created} · ${lastUsed}</span>
+          <button class="key-card-revoke" data-key-id="${escapeHtml(k.key_id)}">撤销</button>
+        </div>
+      </div>`;
+    }).join('');
+    // 绑定撤销按钮
+    list.querySelectorAll('.key-card-revoke').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const keyId = btn.dataset.keyId;
+        const resp = await apiFetch('/api/keys/' + encodeURIComponent(keyId), { method: 'DELETE' });
+        const d = await resp.json();
+        if (d.success) {
+          // 如果撤销的是当前正在用的 key，清除 localStorage
+          if (localStorage.getItem('colorflow_api_key') === keyId) {
+            localStorage.removeItem('colorflow_api_key');
+          }
+          loadKeyList();
+          updateMcpConfig();
+        } else {
+          alert('撤销失败: ' + (d.error || ''));
+        }
+      });
+    });
+  } catch (e) {
+    list.innerHTML = '<div class="key-empty">加载失败</div>';
+  }
+}
+
+function updateMcpConfig() {
+  const block = document.getElementById('mcpConfig');
+  if (!block) return;
+  const key = localStorage.getItem('colorflow_api_key') || '（请先生成 Key）';
+  const scriptPath = window.location.pathname.replace(/\/$/, '') || '.';
+  const config = {
+    mcpServers: {
+      colorflow: {
+        command: 'python',
+        args: ['mcp_server.py'],
+        env: { COLORFLOW_API_KEY: key }
+      }
+    }
+  };
+  block.textContent = JSON.stringify(config, null, 2);
+}
+
+// === Key 生成 ===
+const generateKeyBtn = document.getElementById('generateKeyBtn');
+const keyModal = document.getElementById('keyModal');
+const newKeyDisplay = document.getElementById('newKeyDisplay');
+const copyNewKeyBtn = document.getElementById('copyNewKeyBtn');
+
+if (generateKeyBtn) {
+  generateKeyBtn.addEventListener('click', async () => {
+    const name = prompt('给这个 Key 起个名字（如：我的 Claude Code）', '');
+    if (name === null) return;
+    try {
+      const resp = await apiFetch('/api/keys/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name || '未命名' }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        newKeyDisplay.value = data.key;
+        localStorage.setItem('colorflow_api_key', data.key);
+        keyModal.classList.remove('hidden');
+        loadKeyList();
+        updateMcpConfig();
+      } else {
+        alert('生成失败: ' + (data.error || ''));
+      }
+    } catch (e) {
+      alert('请求失败: ' + e);
+    }
+  });
+}
+
+if (copyNewKeyBtn) {
+  copyNewKeyBtn.addEventListener('click', () => {
+    newKeyDisplay.select();
+    document.execCommand('copy');
+    copyNewKeyBtn.textContent = '✓ 已复制';
+    setTimeout(() => { copyNewKeyBtn.textContent = '复制 Key'; }, 1500);
+  });
+}
+
+// 点击弹窗外部关闭
+if (keyModal) {
+  keyModal.addEventListener('click', e => {
+    if (e.target === keyModal) keyModal.classList.add('hidden');
+  });
+}
+
+// === MCP 配置复制 ===
+const copyMcpConfigBtn = document.getElementById('copyMcpConfigBtn');
+if (copyMcpConfigBtn) {
+  copyMcpConfigBtn.addEventListener('click', () => {
+    const block = document.getElementById('mcpConfig');
+    block.select ? block.select() : null;
+    navigator.clipboard.writeText(block.textContent).then(() => {
+      copyMcpConfigBtn.textContent = '✓ 已复制';
+      setTimeout(() => { copyMcpConfigBtn.textContent = '复制配置'; }, 1500);
+    });
+  });
 }
 
 // === Sidebar（DeepSeek Harness 式左栏抽屉，≤960px） ===
@@ -68,6 +178,8 @@ const settingsBackdrop = document.getElementById('settingsBackdrop');
 
 function openSettingsModal() {
   settingsModal.classList.add('open');
+  loadKeyList();
+  updateMcpConfig();
 }
 function closeSettingsModal() {
   settingsModal.classList.remove('open');
@@ -84,10 +196,8 @@ const clearApiKeyBtn = document.getElementById('clearApiKeyBtn');
 if (quickStartBtn) {
   quickStartBtn.addEventListener('click', () => {
     closeSettingsModal();
-    // 切换到矢量描图 Tab
     const traceTab = document.querySelector('.tab[data-tab="trace"]');
     if (traceTab) traceTab.click();
-    // 滚动到上传区
     setTimeout(() => {
       const uploadZone = document.getElementById('uploadZone');
       if (uploadZone) uploadZone.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -98,9 +208,9 @@ if (quickStartBtn) {
 if (clearApiKeyBtn) {
   clearApiKeyBtn.addEventListener('click', () => {
     localStorage.removeItem('colorflow_api_key');
-    if (apiKeyInput) apiKeyInput.value = '';
     clearApiKeyBtn.textContent = '✓ 已清除';
-    setTimeout(() => { clearApiKeyBtn.textContent = '清除 API Key'; }, 1500);
+    setTimeout(() => { clearApiKeyBtn.textContent = '清除本地 Key'; }, 1500);
+    updateMcpConfig();
   });
 }
 

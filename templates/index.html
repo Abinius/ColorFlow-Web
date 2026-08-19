@@ -103,7 +103,7 @@
         </div>
         <div class="settings-modal-body">
           <div class="settings-panel">
-            <h3>通用设置</h3>
+            <h3>通用</h3>
             <div class="settings-section">
               <p class="settings-desc">快速体验矢量描图功能</p>
               <button class="btn btn-primary settings-action-btn" id="quickStartBtn">
@@ -112,16 +112,58 @@
               </button>
             </div>
             <div class="settings-section">
-              <p class="settings-desc">清除本地保存的 API Key</p>
-              <button class="btn btn-small btn-secondary settings-action-btn" id="clearApiKeyBtn">清除 API Key</button>
+              <p class="settings-desc">清除浏览器本地保存的 API Key</p>
+              <button class="btn btn-small btn-secondary settings-action-btn" id="clearApiKeyBtn">清除本地 Key</button>
             </div>
           </div>
           <div class="settings-panel">
-            <h3>API Key 设置</h3>
-            <div class="api-key-col">
-              <label class="settings-label">API Key（可选）</label>
-              <input type="password" id="apiKeyInput" class="api-key-input" placeholder="输入 API Key" autocomplete="off" />
-              <button class="btn btn-small btn-secondary" id="apiKeyBtn">保存</button>
+            <h3>API Key 管理</h3>
+            <div class="settings-section">
+              <p class="settings-desc">生成 Key 后，前端请求和 MCP 接入共用同一把钥匙</p>
+              <button class="btn btn-primary settings-action-btn" id="generateKeyBtn">+ 生成新 Key</button>
+            </div>
+            <div class="key-list" id="keyList">
+              <div class="key-empty">暂无 Key</div>
+            </div>
+            <div class="key-modal hidden" id="keyModal">
+              <div class="key-modal-box">
+                <div class="key-modal-title">✅ Key 已生成（仅显示一次）</div>
+                <input type="text" id="newKeyDisplay" class="key-display-input" readonly />
+                <button class="btn btn-small btn-primary" id="copyNewKeyBtn">复制 Key</button>
+                <div class="key-modal-hint">MCP 配置已自动填充 → 右侧「MCP 智能体接入」可直接复制</div>
+              </div>
+            </div>
+          </div>
+          <div class="settings-panel">
+            <h3>MCP 智能体接入</h3>
+            <div class="settings-section">
+              <p class="settings-desc">复制下方 JSON 到 Claude Code / Cursor 的 .mcp.json</p>
+              <pre class="mcp-config-block" id="mcpConfig">{
+  "mcpServers": {
+    "colorflow": {
+      "command": "python",
+      "args": ["mcp_server.py"],
+      "env": {
+        "COLORFLOW_API_KEY": "（请先生成 Key）"
+      }
+    }
+  }
+}</pre>
+              <button class="btn btn-small btn-primary" id="copyMcpConfigBtn">复制配置</button>
+            </div>
+            <div class="settings-section">
+              <p class="settings-desc">可用工具（9 个）</p>
+              <div class="mcp-tools-list">
+                <span class="mcp-tool-tag">trace_image</span>
+                <span class="mcp-tool-tag">cutout</span>
+                <span class="mcp-tool-tag">cutout_then_trace</span>
+                <span class="mcp-tool-tag">trace_and_match</span>
+                <span class="mcp-tool-tag">match_pantone</span>
+                <span class="mcp-tool-tag">pantone_lookup</span>
+                <span class="mcp-tool-tag">pantone_colors</span>
+                <span class="mcp-tool-tag">export_print</span>
+                <span class="mcp-tool-tag">quote_print</span>
+              </div>
             </div>
           </div>
         </div>

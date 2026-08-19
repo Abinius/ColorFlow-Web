@@ -32,27 +32,38 @@ sdk = ColorFlowSDK(output_dir="/tmp/colorflow-output")
 # 允许的图片类型
 ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp", "image/bmp"}
 
-# API Key 认证：设置 COLORFLOW_API_KEY 后启用（生产环境必须设置）；未设置则开放（适合本地开发）
-COLORFLOW_API_KEY = os.getenv("COLORFLOW_API_KEY", "").strip()
+# API Key 认证：通过 KeyStore 管理（支持从 UI 生成/撤销）；COLORFLOW_API_KEY 环境变量向后兼容
+from colorflow_keys import keystore
+
+# Key 管理端点白名单（不需要已有 key 即可访问 — bootstrap 模式）
+_KEY_MGMT_PATHS = {"/api/keys/generate", "/api/keys"}
 
 
 @app.before_request
 def require_api_key():
-    """保护 /api/* 路由：已配置 COLORFLOW_API_KEY 时，请求必须携带正确的 x-api-key 头。"""
-    if not COLORFLOW_API_KEY:
-        return  # 未配置密钥 → 不启用认证
+    """保护 /api/* 路由：已配置 Key 时，请求必须携带正确的 x-api-key 头。"""
     if not request.path.startswith("/api/"):
         return  # 页面 / 与静态资源保持公开
 
+    # Key 管理端点的特殊处理
+    if request.path in _KEY_MGMT_PATHS:
+        # 如果还没有任何 key → 允许首次生成（bootstrap）
+        if not keystore.has_any():
+            return
+        # 已有 key → 必须携带有效 key 才能管理
+        api_key = request.headers.get("x-api-key", "")
+        if keystore.verify(api_key):
+            return
+        return jsonify({"error": "Unauthorized: missing or invalid API key"}), 401
+
+    # 普通业务端点
+    if not keystore.has_any():
+        return  # 无 key → 开放（本地开发模式）
+
     api_key = request.headers.get("x-api-key", "")
-    # 转 bytes 后恒定时间比较，避免非 ASCII 头抛 TypeError / 时序攻击
-    if not secrets.compare_digest(
-        api_key.encode("utf-8"), COLORFLOW_API_KEY.encode("utf-8")
-    ):
-        return (
-            jsonify({"error": "Unauthorized: missing or invalid API key"}),
-            401,
-        )
+    if keystore.verify(api_key):
+        return
+    return jsonify({"error": "Unauthorized: missing or invalid API key"}), 401
 
 
 def _int_arg(value, default):
@@ -695,6 +706,38 @@ def export_print():
             "Content-Disposition": 'attachment; filename="colorflow_print.pdf"',
         },
     )
+
+
+# === API Key 管理 ===
+
+
+@app.route("/api/keys/generate", methods=["POST"])
+def generate_key():
+    """生成新 API Key（明文仅返回一次）"""
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "")
+    entry = keystore.generate(name=name)
+    return jsonify({
+        "success": True,
+        "key": entry["key"],  # 明文，仅此一次
+        "name": entry["name"],
+        "created_at": entry["created_at"],
+    })
+
+
+@app.route("/api/keys", methods=["GET"])
+def list_keys():
+    """列出所有 Key（脱敏）"""
+    keys = keystore.list_all()
+    return jsonify({"success": True, "keys": keys, "count": len(keys)})
+
+
+@app.route("/api/keys/<path:key_id>", methods=["DELETE"])
+def revoke_key(key_id):
+    """撤销指定 Key"""
+    if keystore.revoke(key_id):
+        return jsonify({"success": True, "revoked": key_id[:8] + "****"})
+    return jsonify({"error": "Key not found"}), 404
 
 
 if __name__ == "__main__":

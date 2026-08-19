@@ -166,31 +166,75 @@ class TestPantoneColors:
 
 
 class TestApiAuth:
-    """API Key 认证测试（默认未配置 → 开放；配置后保护 /api/*）"""
+    """API Key 认证测试（默认无 Key → 开放；生成 Key 后保护 /api/*）"""
 
     def test_disabled_by_default(self):
-        assert app_module.COLORFLOW_API_KEY == ""
+        from colorflow_keys import keystore
+        assert not keystore.has_any()
 
     def test_requires_key_when_configured(self, monkeypatch):
-        monkeypatch.setattr(app_module, "COLORFLOW_API_KEY", "test-secret-key")
-        # 无 key → 401
-        r = client.get("/api/pantone/colors")
-        assert r.status_code == 401
-        # 错误 key → 401
-        r = client.get("/api/pantone/colors", headers={"x-api-key": "wrong"})
-        assert r.status_code == 401
-        # 正确 key → 200
-        r = client.get("/api/pantone/colors", headers={"x-api-key": "test-secret-key"})
-        assert r.status_code == 200
-        # 非 ASCII key → 401（不应 500）
-        r = client.get("/api/pantone/colors", headers={"x-api-key": "中文😀"})
-        assert r.status_code == 401
+        from colorflow_keys import keystore
+        # 生成一个 key
+        entry = keystore.generate(name="test-key")
+        test_key = entry["key"]
+        try:
+            # 无 key → 401
+            r = client.get("/api/pantone/colors")
+            assert r.status_code == 401
+            # 错误 key → 401
+            r = client.get("/api/pantone/colors", headers={"x-api-key": "wrong"})
+            assert r.status_code == 401
+            # 正确 key → 200
+            r = client.get("/api/pantone/colors", headers={"x-api-key": test_key})
+            assert r.status_code == 200
+            # 非 ASCII key → 401（不应 500）
+            r = client.get("/api/pantone/colors", headers={"x-api-key": "中文😀"})
+            assert r.status_code == 401
+        finally:
+            keystore.revoke(test_key)
 
     def test_static_and_index_open_when_configured(self, monkeypatch):
-        monkeypatch.setattr(app_module, "COLORFLOW_API_KEY", "test-secret-key")
-        # 页面 / 与静态资源不受保护
-        assert client.get("/").status_code == 200
-        assert client.get("/static/app.js").status_code == 200
+        from colorflow_keys import keystore
+        entry = keystore.generate(name="test-key-2")
+        test_key = entry["key"]
+        try:
+            assert client.get("/").status_code == 200
+            assert client.get("/static/app.js").status_code == 200
+        finally:
+            keystore.revoke(test_key)
+
+
+class TestKeyManagement:
+    """API Key 管理端点测试"""
+
+    def test_generate_and_list(self):
+        # 先生成一个 key 用于认证
+        from colorflow_keys import keystore
+        entry = keystore.generate(name="mgmt-test")
+        key = entry["key"]
+        try:
+            # 列出 keys
+            r = client.get("/api/keys", headers={"x-api-key": key})
+            assert r.status_code == 200
+            data = r.get_json()
+            assert data["success"] is True
+            assert data["count"] > 0
+            # 验证脱敏
+            for k in data["keys"]:
+                assert "****" in k["key_masked"]
+        finally:
+            keystore.revoke(key)
+
+    def test_revoke(self):
+        from colorflow_keys import keystore
+        entry = keystore.generate(name="revoke-test")
+        key = entry["key"]
+        try:
+            r = client.delete("/api/keys/" + key, headers={"x-api-key": key})
+            assert r.status_code == 200
+            assert r.get_json()["success"] is True
+        finally:
+            keystore.revoke(key)  # 幂等
 
 
 class TestTraceColors:

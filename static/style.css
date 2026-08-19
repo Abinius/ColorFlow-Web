@@ -272,7 +272,7 @@ body {
 
 .settings-modal-body {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 0;
   overflow-y: auto;
   flex: 1;
@@ -1028,4 +1028,75 @@ body {
 @media (max-width: 768px) {
   .export-form { grid-template-columns: auto 1fr; }
   .export-form .btn-primary, .export-form .btn-small { grid-column: span 2; }
+}
+
+/* === API Key 列表 === */
+.key-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.key-empty { font-size: 13px; font-weight: 330; color: var(--muted); text-align: center; padding: 16px 0; }
+.key-card {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 10px 12px;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+}
+.key-card-name { font-size: 14px; font-weight: 480; color: var(--ink); }
+.key-card-value {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px; color: var(--muted);
+}
+.key-card-meta {
+  display: flex; align-items: center; gap: 8px; justify-content: space-between;
+  font-size: 11px; color: var(--muted);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.key-card-revoke {
+  border: none; background: transparent;
+  color: var(--error); font-size: 12px; font-weight: 480;
+  cursor: pointer; padding: 2px 8px; border-radius: var(--radius-pill);
+  font-family: inherit;
+}
+.key-card-revoke:hover { background: rgba(214, 69, 69, 0.1); }
+
+/* === Key 生成弹窗 === */
+.key-modal {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+}
+.key-modal-box {
+  background: var(--canvas); border-radius: var(--radius-lg);
+  padding: 24px; max-width: 480px; width: 90vw;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.key-modal-title { font-size: 16px; font-weight: 540; color: var(--ink); }
+.key-display-input {
+  width: 100%; padding: 10px 12px;
+  background: var(--surface-soft); border: 1px solid var(--hairline);
+  border-radius: var(--radius-md); font-size: 13px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--ink); outline: none;
+}
+.key-modal-hint { font-size: 12px; color: var(--muted); }
+
+/* === MCP 配置块 === */
+.mcp-config-block {
+  background: var(--surface-soft); border: 1px solid var(--hairline);
+  border-radius: var(--radius-md); padding: 12px;
+  font-size: 12px; font-family: 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--ink); white-space: pre-wrap; word-break: break-all;
+  overflow-x: auto; margin: 0 0 8px 0; max-height: 200px; overflow-y: auto;
+}
+.mcp-tools-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.mcp-tool-tag {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px; font-weight: 400;
+  padding: 3px 8px; border-radius: var(--radius-pill);
+  background: var(--block-mint); color: #156b38;
+}
+
+/* 设置弹窗移动端：3 栏 → 1 栏 */
+@media (max-width: 640px) {
+  .settings-modal-body { grid-template-columns: 1fr; }
 }

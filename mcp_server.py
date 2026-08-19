@@ -5,11 +5,18 @@
     python mcp_server.py
 
 接入 Claude Code（~/.claude.json 或项目 .mcp.json）：
-    "mcpServers": { "colorflow": { "command": "python", "args": ["/path/to/mcp_server.py"] } }
+    "mcpServers": {
+        "colorflow": {
+            "command": "python",
+            "args": ["/path/to/mcp_server.py"],
+            "env": { "COLORFLOW_API_KEY": "cf_sk_xxx" }
+        }
+    }
 """
 
 import json
 import math
+import os
 
 from fastmcp import FastMCP
 
@@ -28,7 +35,31 @@ from mcp_print.tools.cost import print_cost_estimate
 # 复用 Web 应用中的 SDK 实例（同一份 VTracer 输出目录等）
 from app import sdk
 
+# API Key 校验（与 Web API 共用同一份 KeyStore）
+from colorflow_keys import keystore
+
 mcp = FastMCP("ColorFlow")
+
+# 启动时读取 COLORFLOW_API_KEY 环境变量（Agent 接入时通过 env 传入）
+_MCP_API_KEY = os.getenv("COLORFLOW_API_KEY", "").strip()
+
+
+def _auth_check() -> str | None:
+    """校验 API Key：有 Key 但未配置 → 返回错误 JSON；无 Key → 放行（本地开发）"""
+    if not keystore.has_any():
+        return None  # 无任何 key → 本地开发模式，放行
+    if not _MCP_API_KEY:
+        return json.dumps(
+            {"error": "未配置 API Key。请在设置页生成 Key 后，通过 COLORFLOW_API_KEY 环境变量传入。"},
+            ensure_ascii=False,
+        )
+    if not keystore.verify(_MCP_API_KEY):
+        return json.dumps(
+            {"error": "API Key 无效或已撤销。请在设置页重新生成。"},
+            ensure_ascii=False,
+        )
+    return None
+
 
 # 允许的图片扩展名
 ALLOWED_EXT = (".png", ".jpg", ".jpeg", ".webp", ".bmp")
@@ -104,6 +135,9 @@ def trace_image(
     Returns:
         JSON: {success, svg_path}
     """
+    auth = _auth_check()
+    if auth:
+        return auth
     err = _check_ext(image_path)
     if err:
         return err
@@ -147,6 +181,9 @@ def cutout(
     Returns:
         JSON: {success, png_path, width, height}
     """
+    auth = _auth_check()
+    if auth:
+        return auth
     err = _check_ext(image_path)
     if err:
         return err
@@ -211,6 +248,9 @@ def cutout_then_trace(
     Returns:
         JSON: {success, svg_path}
     """
+    auth = _auth_check()
+    if auth:
+        return auth
     err = _check_ext(image_path)
     if err:
         return err
@@ -249,6 +289,9 @@ def match_pantone(hex_color: str) -> str:
     Returns:
         JSON: {success, matches: [{name, hex, cmyk, rgb, delta_e, interpretation}]}
     """
+    auth = _auth_check()
+    if auth:
+        return auth
     if not hex_color.startswith("#"):
         hex_color = "#" + hex_color
     if len(hex_color) != 7:
@@ -298,6 +341,9 @@ def pantone_lookup(name: str) -> str:
     Returns:
         JSON: {success, result: {name, hex, c, m, y, k, rgb}}
     """
+    auth = _auth_check()
+    if auth:
+        return auth
     if not name.strip():
         return json.dumps({"error": "请提供色号"}, ensure_ascii=False)
     try:
@@ -322,6 +368,9 @@ def pantone_colors(
     Returns:
         JSON: {success, items: [{name, hex, c, m, y, k, ...}], total, page, pages}
     """
+    auth = _auth_check()
+    if auth:
+        return auth
     page = max(page, 1)
     limit = min(max(limit, 1), 200)
     try:
@@ -374,6 +423,9 @@ def quote_print(
         JSON: {success, result: {ink_cost_usd, setup_cost_usd, total_cost_usd,
                cost_per_unit_usd, currency, breakdown}}
     """
+    auth = _auth_check()
+    if auth:
+        return auth
     try:
         result = print_cost_estimate(
             width_mm=width_mm,
@@ -425,6 +477,9 @@ def export_print(
     Returns:
         JSON: {success, pdf_path}
     """
+    auth = _auth_check()
+    if auth:
+        return auth
     err = _check_ext(image_path)
     if err:
         return err
@@ -482,6 +537,9 @@ def trace_and_match(
     Returns:
         JSON: {success, svg_path, color_count, palette: [{color, pantone_matches}]}
     """
+    auth = _auth_check()
+    if auth:
+        return auth
     err = _check_ext(image_path)
     if err:
         return err
