@@ -21,8 +21,9 @@ ColorFlow Web 是 **ColorFlow 矢量描图 SDK** 和 **Pantone 色彩管理** �
 | **色彩匹配** | 输入 HEX，自动匹配最近的 5 个 Pantone 色 + ΔE 色彩偏差 |
 | **一键流水线** | 描图后自动提取主色 → 逐一匹配 Pantone |
 | **印刷 PDF 导出** | 位图 → 生产印刷级 CMYK PDF（含出血 + 物理尺寸） |
+| **Pantone 色卡导出** | 色号查询详情一键导出色卡 PDF；匹配结果导出报告 PDF（CMYK 印刷级）|
 | **API Key 管理** | 设置页一键生成 / 撤销 Key，Web API 与 MCP 共用 |
-| **AI Agent 接入** | 内置 MCP Server（9 工具），Claude Code / Cursor 可直接调用 |
+| **AI Agent 接入** | 内置 MCP Server（10 工具），Claude Code / Cursor 可直接调用 |
 
 ## 技术栈
 
@@ -132,7 +133,7 @@ gunicorn -w 2 -b 0.0.0.0:5000 app:app
 }
 ```
 
-### 可用工具（9 个）
+### 可用工具（10 个）
 
 | Tool | 说明 | 关键参数 |
 |------|------|---------|
@@ -145,6 +146,7 @@ gunicorn -w 2 -b 0.0.0.0:5000 app:app
 | `pantone_colors` | Pantone 色库分页 + 搜索 | page, limit, search |
 | `quote_print` | 印刷全链路报价 | width, height, qty, colors, gsm, method |
 | `export_print` | 位图 → 印刷级 CMYK PDF | width_mm, height_mm, bleed_mm, mode |
+| `export_pantone_pdf` | 色卡 / 匹配报告 PDF | export_type（swatch / report）, 颜色数据 |
 
 ### Agent 调用示例
 
@@ -160,6 +162,11 @@ Agent: 调用 cutout("D:/photo.jpg", model="silueta", alpha_matting=True)
 用户: 「查询 Pantone 485C 的 CMYK 值」
 Agent: 调用 pantone_lookup("485C")
   → {name, hex, c, m, y, k, rgb}
+
+用户: 「把 485C 的色值导出成色卡 PDF」
+Agent: 调用 export_pantone_pdf(export_type="swatch", name="485 C",
+         hex_color="#DA291C", cmyk=[0,85,95,5], rgb=[218,41,28])
+  → {success, pdf_path}
 ```
 
 ## API 接口
@@ -174,6 +181,7 @@ Agent: 调用 pantone_lookup("485C")
 | `GET` | `/api/pantone/colors?page=&limit=&search=` | Pantone 颜色列表（分页）|
 | `POST` | `/api/cost/quote` | 印刷报价计算 |
 | `POST` | `/api/print/export` | 位图 → 印刷级 CMYK PDF 下载 |
+| `POST` | `/api/pantone/export` | 色卡 / 匹配报告 PDF（CMYK）|
 | `POST` | `/api/keys/generate` | 生成新 API Key |
 | `GET` | `/api/keys` | 列出所有 Key（脱敏）|
 | `DELETE` | `/api/keys/<key_id>` | 撤销指定 Key |
@@ -231,6 +239,11 @@ curl -X POST http://localhost:5000/api/pantone/match \
 curl -X POST http://localhost:5000/api/keys/generate \
   -H "Content-Type: application/json" \
   -d '{"name": "我的 Agent"}'
+
+# 导出色卡 PDF
+curl -X POST http://localhost:5000/api/pantone/export \
+  -H "Content-Type: application/json" \
+  -d '{"type": "swatch", "name": "485 C", "hex": "#DA291C", "cmyk": [0,85,95,5], "rgb": [218,41,28]}'
 ```
 
 ## 错误码
@@ -257,7 +270,7 @@ curl -X POST http://localhost:5000/api/keys/generate \
 colorflow-web/
 ├── app.py               # Flask 入口，所有 API 路由 + Key 管理端点
 ├── colorflow_keys.py    # KeyStore：API Key 生成 / 校验 / 撤销
-├── mcp_server.py        # MCP Server（9 工具 + Key 认证）
+├── mcp_server.py        # MCP Server（10 工具 + Key 认证）
 ├── templates/
 │   └── index.html      # 单页（抠图 / 描图 / Pantone / 色彩匹配 + 设置页）
 ├── static/
@@ -278,7 +291,7 @@ colorflow-web/
 
 ```bash
 pip install pytest
-python -m pytest tests/ -q     # 56 个用例
+python -m pytest tests/ -q     # 59 个用例
 ```
 
 ## 相关项目
