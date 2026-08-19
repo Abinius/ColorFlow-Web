@@ -402,8 +402,13 @@ def trace_colors():
                 "color_count": len(palette),
             }
         )
+    except ValidationError as e:
+        # 参数类错误（如 pantone_search 收到非法颜色），4xx，无堆栈
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # 真实逻辑/数据错误：记录完整堆栈便于线上排障，避免被宽泛捕获掩盖
+        app.logger.exception("trace_colors 调色板构建失败")
+        return jsonify({"error": f"调色板构建失败: {type(e).__name__}"}), 500
 
 
 @app.route("/api/pantone/match", methods=["POST"])
