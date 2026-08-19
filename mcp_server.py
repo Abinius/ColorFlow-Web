@@ -40,20 +40,22 @@ from colorflow_keys import keystore
 
 mcp = FastMCP("ColorFlow")
 
-# 启动时读取 COLORFLOW_API_KEY 环境变量（Agent 接入时通过 env 传入）
-_MCP_API_KEY = os.getenv("COLORFLOW_API_KEY", "").strip()
-
 
 def _auth_check() -> str | None:
-    """校验 API Key：有 Key 但未配置 → 返回错误 JSON；无 Key → 放行（本地开发）"""
+    """校验 API Key：有 Key 但未配置 → 返回错误 JSON；无 Key → 放行（本地开发）
+
+    每次调用时动态读取 COLORFLOW_API_KEY 环境变量，
+    确保 Agent 启动后通过 env 注入的 key 能即时生效。
+    """
     if not keystore.has_any():
         return None  # 无任何 key → 本地开发模式，放行
-    if not _MCP_API_KEY:
+    api_key = os.getenv("COLORFLOW_API_KEY", "").strip()
+    if not api_key:
         return json.dumps(
             {"error": "未配置 API Key。请在设置页生成 Key 后，通过 COLORFLOW_API_KEY 环境变量传入。"},
             ensure_ascii=False,
         )
-    if not keystore.verify(_MCP_API_KEY):
+    if not keystore.verify(api_key):
         return json.dumps(
             {"error": "API Key 无效或已撤销。请在设置页重新生成。"},
             ensure_ascii=False,
