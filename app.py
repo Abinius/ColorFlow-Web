@@ -740,6 +740,139 @@ def revoke_key(key_id):
     return jsonify({"error": "Key not found"}), 404
 
 
+# === Pantone 色卡 / 匹配报告 PDF 导出 ===
+
+
+def _hex_to_cmyk_color(hex_str):
+    """HEX 字符串 → reportlab CMYKColor"""
+    from reportlab.lib.colors import CMYKColor
+    from PIL import Image
+    h = hex_str.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    cmyk = Image.new("RGB", (1, 1), (r, g, b)).convert("CMYK").load()[0, 0]
+    return CMYKColor(cmyk[0] / 255, cmyk[1] / 255, cmyk[2] / 255, cmyk[3] / 255)
+
+
+@app.route("/api/pantone/export", methods=["POST"])
+def pantone_export_pdf():
+    """生成色卡 / 匹配报告 PDF（CMYK，印刷级）
+
+    请求体 JSON:
+      type: "swatch" (单个色卡) | "report" (匹配报告)
+      色卡模式: {type, name, hex, cmyk: [c,m,y,k], rgb: [r,g,b]}
+      报告模式: {type, input_hex, matches: [{name, hex, cmyk, rgb, delta_e}]}
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid JSON body"}), 400
+
+    export_type = data.get("type", "swatch")
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.colors import CMYKColor, Color
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.units import mm
+        import io as _bio
+
+        buf = _bio.BytesIO()
+        c = canvas.Canvas(buf, pagesize=A4)
+        page_w, page_h = A4
+
+        if export_type == "swatch":
+            # === 单个色卡 ===
+            name = data.get("name", "Unknown")
+            hex_val = data.get("hex", "#000000")
+            cmyk = data.get("cmyk", [0, 0, 0, 100])
+            rgb = data.get("rgb", [0, 0, 0])
+
+            swatch_x = 50
+            swatch_y = page_h - 250
+            swatch_w = 180
+            swatch_h = 180
+
+            c.setFillColor(_hex_to_cmyk_color(hex_val))
+            c.rect(swatch_x, swatch_y, swatch_w, swatch_h, fill=1, stroke=0)
+
+            # 右侧色值信息
+            text_x = swatch_x + swatch_w + 30
+            text_y = swatch_y + swatch_h - 20
+            c.setFillColor(Color(0, 0, 0))
+            c.setFont("Helvetica-Bold", 20)
+            c.drawString(text_x, text_y, name)
+            c.setFont("Helvetica", 12)
+            c.drawString(text_x, text_y - 30, "HEX    " + hex_val.upper())
+            c.drawString(text_x, text_y - 50, "CMYK   {} / {} / {} / {}".format(*cmyk))
+            c.drawString(text_x, text_y - 70, "RGB    {} / {} / {}".format(*rgb))
+
+            # 底部品牌
+            c.setFont("Helvetica", 9)
+            c.setFillColor(Color(0.5, 0.5, 0.5))
+            c.drawString(50, 40, "ColorFlow · 色卡规格")
+
+        elif export_type == "report":
+            # === 匹配报告 ===
+            input_hex = data.get("input_hex", "#000000")
+            matches = data.get("matches", [])
+
+            # 标题
+            c.setFillColor(Color(0, 0, 0))
+            c.setFont("Helvetica-Bold", 18)
+            c.drawString(50, page_h - 60, "色彩匹配报告")
+
+            # 输入色块
+            c.setFillColor(_hex_to_cmyk_color(input_hex))
+            c.rect(50, page_h - 160, 60, 60, fill=1, stroke=0)
+            c.setFillColor(Color(0, 0, 0))
+            c.setFont("Helvetica", 12)
+            c.drawString(125, page_h - 110, "输入色 " + input_hex.upper())
+
+            # 匹配列表
+            y = page_h - 200
+            c.setFont("Helvetica-Bold", 11)
+            c.drawString(50, y, "色块")
+            c.drawString(120, y, "Pantone")
+            c.drawString(330, y, "HEX")
+            c.drawString(430, y, "ΔE")
+            y -= 6
+            c.setStrokeColor(Color(0.8, 0.8, 0.8))
+            c.line(50, y, page_w - 50, y)
+            y -= 20
+
+            for m in matches:
+                m_hex = m.get("hex", "#000000")
+                m_name = m.get("name", "")
+                m_de = m.get("delta_e", 0)
+
+                # 色块
+                c.setFillColor(_hex_to_cmyk_color(m_hex))
+                c.rect(50, y - 14, 50, 20, fill=1, stroke=0)
+
+                c.setFillColor(Color(0, 0, 0))
+                c.setFont("Helvetica", 11)
+                c.drawString(120, y - 8, m_name)
+                c.drawString(330, y - 8, m_hex.upper())
+                c.drawString(430, y - 8, str(m_de))
+                y -= 35
+
+            # 底部
+            c.setFont("Helvetica", 9)
+            c.setFillColor(Color(0.5, 0.5, 0.5))
+            c.drawString(50, 40, "ColorFlow · 色彩匹配报告 · 输入色 " + input_hex.upper())
+
+        else:
+            return jsonify({"error": "Invalid type: must be 'swatch' or 'report'"}), 400
+
+        c.save()
+        pdf_bytes = buf.getvalue()
+        return Response(
+            pdf_bytes,
+            mimetype="application/pdf",
+            headers={"Content-Disposition": 'attachment; filename="colorflow_swatch.pdf"'},
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(
         host="0.0.0.0",

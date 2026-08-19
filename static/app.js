@@ -653,6 +653,7 @@ const pantoneInput = document.getElementById('pantoneInput');
 const pantoneBtn = document.getElementById('pantoneBtn');
 const pantoneResult = document.getElementById('pantoneResult');
 const pantoneError = document.getElementById('pantoneError');
+let pantoneLookupResult = null;
 
 pantoneBtn.addEventListener('click', async () => {
   const name = pantoneInput.value.trim();
@@ -665,12 +666,14 @@ pantoneBtn.addEventListener('click', async () => {
     const data = await resp.json();
     if (data.success) {
       const r = data.result;
+      pantoneLookupResult = r;
       document.getElementById('pantoneSwatch').style.background = r.hex;
       document.getElementById('pantoneName').textContent = r.name;
       document.getElementById('pantoneHex').textContent = r.hex;
       document.getElementById('pantoneCmyk').textContent = `${r.c}/${r.m}/${r.y}/${r.k}`;
       document.getElementById('pantoneRgb').textContent = r.rgb || 'N/A';
       pantoneResult.classList.remove('hidden');
+      document.getElementById('pantoneExportRow').classList.remove('hidden');
     } else {
       pantoneError.textContent = data.error || '查询失败';
       pantoneError.classList.remove('hidden');
@@ -682,6 +685,39 @@ pantoneBtn.addEventListener('click', async () => {
 });
 
 pantoneInput.addEventListener('keydown', e => { if (e.key === 'Enter') pantoneBtn.click(); });
+
+// 色号查询 — 导出色卡 PDF
+const pantoneExportBtn = document.getElementById('pantoneExportBtn');
+if (pantoneExportBtn) {
+  pantoneExportBtn.addEventListener('click', async () => {
+    if (!pantoneLookupResult) return;
+    pantoneExportBtn.textContent = '生成中...';
+    try {
+      const resp = await apiFetch('/api/pantone/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'swatch',
+          name: pantoneLookupResult.name,
+          hex: pantoneLookupResult.hex,
+          cmyk: [pantoneLookupResult.c, pantoneLookupResult.m, pantoneLookupResult.y, pantoneLookupResult.k],
+          rgb: pantoneLookupResult.rgb ? pantoneLookupResult.rgb.split('/').map(s => parseInt(s.trim())) : [0, 0, 0],
+        }),
+      });
+      if (!resp.ok) { const d = await resp.json().catch(() => ({})); alert('导出失败: ' + (d.error || resp.status)); return; }
+      const blob = await resp.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `pantone_${pantoneLookupResult.name.replace(/\s/g, '_')}.pdf`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      alert('导出失败: ' + e);
+    } finally {
+      pantoneExportBtn.textContent = '导出色卡 PDF';
+    }
+  });
+}
 
 // === Color Match ===
 const colorPicker = document.getElementById('colorPicker');
@@ -695,6 +731,9 @@ hexInput.addEventListener('input', () => {
     colorPicker.value = hexInput.value;
   }
 });
+
+// 存储匹配结果供导出使用
+let matchExportData = null;
 
 matchBtn.addEventListener('click', async () => {
   let hex = hexInput.value.trim();
@@ -711,6 +750,8 @@ matchBtn.addEventListener('click', async () => {
     });
     const data = await resp.json();
     if (data.success && data.matches.length > 0) {
+      matchExportData = { input_hex: hex, matches: data.matches };
+      document.getElementById('matchExportRow').classList.remove('hidden');
       matchResults.innerHTML = '';
       data.matches.forEach(m => {
         const gradeClass = m.delta_e < 1 ? 'excellent' : m.delta_e < 3 ? 'good' : m.delta_e < 6 ? 'fair' : 'poor';
@@ -736,3 +777,39 @@ matchBtn.addEventListener('click', async () => {
 // === Print Cost ===
 // Initial color match load
 matchBtn.click();
+
+// 色号匹配 — 导出报告 PDF
+const matchExportBtn = document.getElementById('matchExportBtn');
+if (matchExportBtn) {
+  matchExportBtn.addEventListener('click', async () => {
+    if (!matchExportData) return;
+    matchExportBtn.textContent = '生成中...';
+    try {
+      const resp = await apiFetch('/api/pantone/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'report',
+          input_hex: matchExportData.input_hex,
+          matches: matchExportData.matches.map(m => ({
+            name: m.name,
+            hex: m.hex,
+            cmyk: m.cmyk,
+            delta_e: m.delta_e,
+          })),
+        }),
+      });
+      if (!resp.ok) { const d = await resp.json().catch(() => ({})); alert('导出失败: ' + (d.error || resp.status)); return; }
+      const blob = await resp.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `pantone_match_report.pdf`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      alert('导出失败: ' + e);
+    } finally {
+      matchExportBtn.textContent = '导出匹配报告 PDF';
+    }
+  });
+}
