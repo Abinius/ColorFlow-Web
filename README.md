@@ -14,13 +14,15 @@ ColorFlow Web 是 **ColorFlow 矢量描图 SDK** 和 **Pantone 色彩管理** �
 
 | 功能 | 说明 |
 |------|------|
-| **位图抠图** | 上传位图，rembg（silueta 模型）AI 移除背景，输出**透明 PNG**，棋盘格预览 |
-| **矢量描图** | 上传位图（PNG/JPG/WebP/BMP），VTracer 转 SVG，预览 + 下载 |
+| **位图抠图** | 上传位图，rembg AI 移除背景，8 模型可选 + Alpha Matting 边缘细化，输出**透明 PNG** |
+| **矢量描图** | 上传位图（PNG/JPG/WebP/BMP），VTracer 转 SVG，10 个精度参数可调 |
 | **忽略白色** | 描图后自动去除白色路径，输出透明背景 SVG（容差可调） |
 | **Pantone 查色** | 输入 Pantone 色号，一键获取 HEX / CMYK / RGB 值 |
 | **色彩匹配** | 输入 HEX，自动匹配最近的 5 个 Pantone 色 + ΔE 色彩偏差 |
 | **一键流水线** | 描图后自动提取主色 → 逐一匹配 Pantone |
-| **AI Agent 接入** | 内置 MCP Server，Claude Code 等 Agent 可直接调用全部能力 |
+| **印刷 PDF 导出** | 位图 → 生产印刷级 CMYK PDF（含出血 + 物理尺寸） |
+| **API Key 管理** | 设置页一键生成 / 撤销 Key，Web API 与 MCP 共用 |
+| **AI Agent 接入** | 内置 MCP Server（9 工具），Claude Code / Cursor 可直接调用 |
 
 ## 技术栈
 
@@ -32,6 +34,8 @@ ColorFlow Web 是 **ColorFlow 矢量描图 SDK** 和 **Pantone 色彩管理** �
 | 描图引擎 | [VTracer](https://github.com/visioncortex/vtracer) (Rust) |
 | 色彩数据库 | [mcp-print](https://github.com/kcgdz/mcp-print) (2415 Pantone 色) |
 | 矢量输出 | [ColorFlow SDK](https://github.com/Abinius/ColorFlow) |
+| MCP Server | [FastMCP](https://github.com/jlowin/fastmcp) — Agent 标准接入协议 |
+| Key 存储 | JSON 文件（`~/.colorflow/keys.json`，权限 0600）|
 
 ## 快速启动
 
@@ -69,11 +73,27 @@ start.bat
   https://gh.ddlc.top/https://github.com/danielgatis/rembg/releases/download/v0.0.0/silueta.onnx
   ```
 
+## API Key 管理
+
+### 生成 Key（推荐）
+
+启动服务后打开 **设置页**（左栏底部齿轮图标）→ 「生成新 Key」按钮 → 输入名称 → Key 明文仅显示一次 → 自动填充到 MCP 配置。
+
+- Key 存储在 `~/.colorflow/keys.json`（文件权限 0600）
+- 支持多个 Key，每个可命名 / 撤销
+- 撤销后即时生效，所有请求立即被拒
+- 首次无 Key 时全部开放（本地开发模式）
+
+### 环境变量（向后兼容）
+
+```bash
+# 传统方式：启动前设置环境变量（仍然有效，会自动 bootstrap 进 KeyStore）
+export COLORFLOW_API_KEY="cf_sk_xxx"
+```
+
 ### 生产部署
 
 ```bash
-# 生产环境务必设置 API Key（设置后 /api/* 需要 x-api-key 头，否则开放）
-export COLORFLOW_API_KEY="your-secret-key"
 export FLASK_DEBUG=false
 export PORT=5000
 python3 app.py
@@ -90,39 +110,56 @@ gunicorn -w 2 -b 0.0.0.0:5000 app:app
 
 ## AI Agent 接入（MCP Server）
 
-内置 MCP Server，让 Claude Code / Cursor 等 Agent 直接调用描图、抠图、Pantone 匹配、报价能力。
+内置 MCP Server，让 Claude Code / Cursor 等 Agent 直接调用全部能力。
 
-```bash
-pip install fastmcp
-mcp run mcp_server.py
-```
+### 快速接入
 
-接入 Claude Code（`~/.claude.json` 或项目 `.mcp.json`）：
+1. 启动 ColorFlow Web 服务
+2. 打开设置页 → 生成 API Key → 复制 `.mcp.json` 配置（Key 已自动填充）
+3. 粘贴到 Claude Code / Cursor 的配置文件
 
 ```json
 {
   "mcpServers": {
     "colorflow": {
       "command": "python",
-      "args": ["/path/to/mcp_server.py"]
+      "args": ["mcp_server.py"],
+      "env": {
+        "COLORFLOW_API_KEY": "cf_sk_xxx"
+      }
     }
   }
 }
 ```
 
-可用工具：
+### 可用工具（9 个）
 
-| Tool | 说明 |
-|------|------|
-| `trace_image` | 位图 → SVG，返回文件路径 |
-| `match_pantone` | HEX → 最近 5 个 Pantone 色 + ΔE |
-| `quote_print` | 印刷全链路报价（后端保留，前端已下线）|
-| `export_print` | 位图 → 生产印刷级 CMYK PDF（出血 + 物理尺寸）|
-| `trace_and_match` | 一键流水线：描图 → 主色 → Pantone 匹配 |
+| Tool | 说明 | 关键参数 |
+|------|------|---------|
+| `trace_image` | 位图 → SVG 矢量图 | mode, colormode, hierarchical, 8 个精度参数 |
+| `cutout` | AI 抠图 → 透明 PNG | model（8 选）, alpha_matting（3 阈值）|
+| `cutout_then_trace` | 抠图 + 描图一键串联 | 抠图参数 + 描图参数全量 |
+| `trace_and_match` | 描图 → 主色 → Pantone 匹配 | 8 个精度参数 |
+| `match_pantone` | HEX → 最近 5 个 Pantone + ΔE | hex_color |
+| `pantone_lookup` | 按色号精确查询 Pantone | name（如 485C）|
+| `pantone_colors` | Pantone 色库分页 + 搜索 | page, limit, search |
+| `quote_print` | 印刷全链路报价 | width, height, qty, colors, gsm, method |
+| `export_print` | 位图 → 印刷级 CMYK PDF | width_mm, height_mm, bleed_mm, mode |
 
-```bash
-# Agent 可直接说：
-# 「把 D:/img.png 描成矢量，提取主色，匹配 Pantone」
+### Agent 调用示例
+
+```
+用户: 「把 D:/img.png 描成矢量，提取主色，匹配 Pantone」
+Agent: 调用 trace_and_match("D:/img.png")
+  → SVG 文件路径 + 调色板（主色 + Pantone 匹配 + ΔE）
+
+用户: 「帮我把这张照片背景抠掉」
+Agent: 调用 cutout("D:/photo.jpg", model="silueta", alpha_matting=True)
+  → 透明 PNG 文件路径
+
+用户: 「查询 Pantone 485C 的 CMYK 值」
+Agent: 调用 pantone_lookup("485C")
+  → {name, hex, c, m, y, k, rgb}
 ```
 
 ## API 接口
@@ -135,8 +172,11 @@ mcp run mcp_server.py
 | `POST` | `/api/pantone/match` | HEX → Pantone 最近匹配 + ΔE |
 | `GET` | `/api/pantone/lookup?name=` | Pantone 色号精确查询 |
 | `GET` | `/api/pantone/colors?page=&limit=&search=` | Pantone 颜色列表（分页）|
-| `POST` | `/api/cost/quote` | 印刷报价计算（前端已下线，API 保留）|
+| `POST` | `/api/cost/quote` | 印刷报价计算 |
 | `POST` | `/api/print/export` | 位图 → 印刷级 CMYK PDF 下载 |
+| `POST` | `/api/keys/generate` | 生成新 API Key |
+| `GET` | `/api/keys` | 列出所有 Key（脱敏）|
+| `DELETE` | `/api/keys/<key_id>` | 撤销指定 Key |
 
 ### 描图请求参数（multipart/form-data）
 
@@ -144,21 +184,53 @@ mcp run mcp_server.py
 |------|------|------|
 | `image` | 图片文件（PNG/JPG/WebP/BMP，≤10MB）| 必填 |
 | `mode` | `color` / `grey` / `human` / `cutout` | `color` |
+| `colormode` | `rgb8` / `rgb16` / `mono` / `grey` / `grey16` | `rgb8` |
+| `hierarchical` | `stacked` / `flat` | `stacked` |
 | `filter_speckle` | 斑点过滤（1-100）| 4 |
+| `color_precision` | 颜色精度（1-16）| 6 |
+| `layer_difference` | 图层距离（1-256）| 64 |
+| `corner_threshold` | 角点阈值（1-180）| 60 |
+| `length_threshold` | 路径最短长度（0.1-100）| 2.0 |
 | `path_precision` | 路径精度（1-16）| 7 |
 | `ignore_white` | `1` 时去除白色路径输出透明 SVG | `0` |
+
+### 抠图请求参数
+
+| 参数 | 说明 | 默认 |
+|------|------|------|
+| `model` | silueta / u2net / u2net_human_seg / u2netp / dis_anime / dis_general_use / withoutbg / bria-rmbg | `silueta` |
+| `alpha_matting` | `1` 启用边缘细化 | `0` |
+| `alpha_matting_foreground_threshold` | 前景阈值（10-255）| 240 |
+| `alpha_matting_background_threshold` | 背景阈值（0-245）| 10 |
+| `alpha_matting_erode_size` | 腐蚀尺寸（1-20）| 10 |
+| `decontaminate` | `1` 清除边缘色晕 | `0` |
+| `post_process_mask` | `1` 二值掩码去噪 | `0` |
 
 ### 示例
 
 ```bash
 # 抠图 → 透明 PNG
 curl -X POST http://localhost:5000/api/cutout \
-  -F "image=@photo.jpg"
+  -F "image=@photo.jpg" \
+  -F "model=silueta" \
+  -F "alpha_matting=1"
+
+# 矢量描图
+curl -X POST http://localhost:5000/api/trace \
+  -F "image=@logo.png" \
+  -F "mode=color" \
+  -F "colormode=mono" \
+  -F "path_precision=10"
 
 # 色彩匹配
 curl -X POST http://localhost:5000/api/pantone/match \
   -H "Content-Type: application/json" \
   -d '{"hex_color": "#DA291C"}'
+
+# 生成 API Key
+curl -X POST http://localhost:5000/api/keys/generate \
+  -H "Content-Type: application/json" \
+  -d '{"name": "我的 Agent"}'
 ```
 
 ## 错误码
@@ -166,6 +238,7 @@ curl -X POST http://localhost:5000/api/pantone/match \
 | 错误码 | 说明 |
 |--------|------|
 | 400 | 参数错误 / 缺少必要字段 / 非法 JSON |
+| 401 | API Key 缺失或无效 |
 | 415 | 不支持的图片类型或未带 JSON Content-Type |
 | 500 | 服务端执行失败 |
 
@@ -182,28 +255,30 @@ curl -X POST http://localhost:5000/api/pantone/match \
 
 ```
 colorflow-web/
-├── app.py              # Flask 入口，所有 API 路由
-├── mcp_server.py       # MCP Server（Agent 接入）
+├── app.py               # Flask 入口，所有 API 路由 + Key 管理端点
+├── colorflow_keys.py    # KeyStore：API Key 生成 / 校验 / 撤销
+├── mcp_server.py        # MCP Server（9 工具 + Key 认证）
 ├── templates/
-│   └── index.html     # 单页（位图抠图 / 矢量描图 / Pantone 查色 / 色彩匹配）
+│   └── index.html      # 单页（抠图 / 描图 / Pantone / 色彩匹配 + 设置页）
 ├── static/
-│   ├── style.css      # Figma DESIGN.md 黑白编辑风样式
-│   └── app.js         # 前端交互逻辑
+│   ├── style.css       # Figma DESIGN.md 样式
+│   ├── app.js          # 前端交互 + Key 管理 + MCP 配置
+│   └── favicon.*       # 浏览器图标（ico/png/svg/manifest）
 ├── models/
-│   └── silueta.onnx   # 抠图模型（42MB，随包附带）
+│   └── silueta.onnx    # 抠图模型（42MB，随包附带）
 ├── tests/
-│   ├── test_app.py    # API 集成测试
-│   └── test_mcp.py    # MCP Server 冒烟测试
-├── start.bat          # Windows 一键启动
-├── DEPLOY.md          # 部署说明
-└── requirements.txt   # 依赖清单
+│   ├── test_app.py     # API 集成测试 + Key 管理测试
+│   └── test_mcp.py     # MCP Server 全工具测试
+├── start.bat           # Windows 一键启动
+├── DEPLOY.md           # 部署说明
+└── requirements.txt    # 依赖清单
 ```
 
 ## 测试
 
 ```bash
 pip install pytest
-python -m pytest tests/ -q     # 41 个用例
+python -m pytest tests/ -q     # 56 个用例
 ```
 
 ## 相关项目
@@ -214,6 +289,7 @@ python -m pytest tests/ -q     # 41 个用例
 | [mcp-print](https://github.com/kcgdz/mcp-print) | Pantone + CMYK + Delta E + 印刷报价（2415 色）|
 | [vtracer](https://github.com/visioncortex/vtracer) | Rust 矢量描图引擎 |
 | [rembg](https://github.com/danielgatis/rembg) | AI 背景移除（silueta/u2net 模型）|
+| [FastMCP](https://github.com/jlowin/fastmcp) | MCP Server 框架 |
 
 ## License
 
