@@ -35,6 +35,28 @@ function apiFetch(url, options = {}) {
   return fetch(url, options);
 }
 
+// === Sidebar（DeepSeek Harness 式左栏抽屉，≤960px） ===
+const sidebar = document.getElementById('sidebar');
+const scrim = document.getElementById('scrim');
+const sidebarToggle = document.getElementById('sidebarToggle');
+const sidebarClose = document.getElementById('sidebarClose');
+
+function openSidebar() {
+  sidebar.classList.add('open');
+  scrim.classList.add('show');
+}
+function closeSidebar() {
+  sidebar.classList.remove('open');
+  scrim.classList.remove('show');
+}
+
+if (sidebarToggle) sidebarToggle.addEventListener('click', openSidebar);
+if (sidebarClose) sidebarClose.addEventListener('click', closeSidebar);
+if (scrim) scrim.addEventListener('click', closeSidebar);
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeSidebar();
+});
+
 // === Tab Navigation ===
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
@@ -42,6 +64,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    // 移动端点击导航后自动收起抽屉
+    if (window.matchMedia('(max-width: 960px)').matches) closeSidebar();
   });
 });
 

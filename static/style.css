@@ -2,7 +2,11 @@
    ColorFlow Web — Figma DESIGN.md style
    Confident black-and-white editorial frame with oversized
    pastel color blocks, pill CTAs, variable-weight type.
-   Ref: D:\Abin\DOC\FigmaDESIGN.md
+   Ref: awesome-design-md/design-md/figma/DESIGN.md
+
+   App shell: DeepSeek Harness 式双栏布局
+   左栏（sidebar）= LOGO + 工具导航 + 设置 + footer
+   右栏（workspace）= 工具内容区，独立滚动
    ============================================================ */
 
 /* === Reset & Base === */
@@ -18,7 +22,7 @@
   --muted: #4a4a4a;            /* auxiliary hints (body hierarchy via weight, not gray) */
   --hairline: #e6e6e6;         /* 1px borders: inputs, cards, tables */
   --hairline-soft: #f1f1f1;    /* even subtler dividers */
-  --surface-soft: #f7f7f5;     /* off-white tiles */
+  --surface-soft: #f7f7f5;     /* off-white tiles / sidebar chrome */
 
   /* pastel color blocks (story surfaces, used sparingly) */
   --block-lime: #dceeb1;
@@ -39,6 +43,10 @@
   --radius-lg: 24px;   /* pricing cards, color blocks */
   --radius-pill: 50px; /* ALL text CTAs + tab toggles */
   --radius-full: 9999px;
+
+  /* App shell (DeepSeek Harness layout) */
+  --sidebar-width: 264px;
+  --mobilebar-height: 52px;
 }
 
 body {
@@ -46,86 +54,226 @@ body {
     'SF Pro Display', system-ui, Helvetica, Arial, sans-serif;
   background: var(--canvas);
   color: var(--ink);
-  min-height: 100vh;
   line-height: 1.45;
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
 }
 
-/* === Layout === */
-.app { display: flex; flex-direction: column; min-height: 100vh; }
+.hidden { display: none !important; }
 
-.header {
-  background: var(--canvas);
-  border-bottom: 1px solid var(--hairline);
-  padding: 0 24px;
-  position: sticky;
-  top: 0;
-  z-index: 10;
+/* ============================================================
+   App shell — DeepSeek Harness 式双栏
+   ============================================================ */
+.app {
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
-.header-inner {
-  max-width: 1280px;
-  margin: 0 auto;
-  height: 56px;                 /* top-nav height token */
+/* === Sidebar (LOGO + 工具导航 + 设置 + footer) === */
+.sidebar {
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-soft);      /* chrome 与内容白画布区分 */
+  border-right: 1px solid var(--hairline);
+  padding: 0 12px;
+  overflow-y: auto;
+}
+
+.sidebar-head {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 10px;
+  height: 56px;                          /* top-nav height token */
+  flex-shrink: 0;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--hairline-soft);
 }
 
 .logo {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 540;
   color: var(--ink);
   letter-spacing: -0.26px;
+  white-space: nowrap;
 }
 
-.logo-icon { font-size: 22px; }
-.logo-plus { color: var(--accent-magenta); font-size: 14px; vertical-align: super; }
+/* LOGO mark — 四色 pastel 方块（block-* tokens） */
+.logo-mark { flex-shrink: 0; }
+.logo-mark .lm-1 { fill: var(--block-lime); }
+.logo-mark .lm-2 { fill: var(--block-lilac); }
+.logo-mark .lm-3 { fill: var(--block-pink); }
+.logo-mark .lm-4 { fill: var(--block-mint); }
 
-.main {
-  flex: 1;
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 48px 24px;
-  width: 100%;
+.sidebar-close { display: none; margin-left: auto; }
+
+/* caption eyebrow — figmaMono，uppercase，positive tracking */
+.sidebar-label {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  padding: 0 14px;
+  margin: 20px 0 8px;
 }
 
-/* === Tabs (pill toggle, selected = primary surface) === */
-.tabs {
+/* === 工具导航（原 tabs，竖排；selected = primary surface） === */
+.sidebar-nav {
   display: flex;
+  flex-direction: column;
   gap: 4px;
-  margin-bottom: 24px;
-  background: var(--surface-soft);
-  border-radius: var(--radius-pill);
-  padding: 4px;
 }
+.sidebar-nav .sidebar-label { margin-top: 16px; }
 
 .tab {
-  flex: 1;
-  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
   border: none;
   background: transparent;
   color: var(--ink);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 480;
-  border-radius: var(--radius-pill);
+  letter-spacing: -0.1px;
+  border-radius: var(--radius-pill);     /* pill — the only button shape */
   cursor: pointer;
+  text-align: left;
   transition: background 0.15s, color 0.15s;
   font-family: inherit;
   white-space: nowrap;
 }
 
+.tab:hover:not(.active) { background: rgba(0, 0, 0, 0.05); }
+
 .tab.active {
-  background: var(--primary);   /* selected tab = black pill, like pricing-tab-selected */
+  background: var(--primary);            /* selected = black pill, like pricing-tab-selected */
   color: var(--on-primary);
+}
+
+.nav-icon { width: 16px; height: 16px; flex-shrink: 0; }
+
+/* === 设置（API Key） === */
+.sidebar-settings { flex-shrink: 0; }
+
+.api-key-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 6px;
+}
+
+.api-key-input {
+  width: 100%;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 330;
+  font-family: inherit;
+  padding: 10px 12px;
+  outline: none;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.api-key-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08);
+}
+.api-key-input::placeholder { color: var(--muted); }
+
+/* === Sidebar footer === */
+.sidebar-footer {
+  margin-top: auto;
+  padding: 16px 8px 14px;
+  border-top: 1px solid var(--hairline-soft);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.sidebar-footer a { color: var(--ink); text-decoration: none; }
+.sidebar-footer a:hover { text-decoration: underline; }
+
+/* === Workspace（右栏内容区） === */
+.workspace {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--canvas);
+}
+
+.main {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 48px;
+  width: 100%;
 }
 
 .tab-content { display: none; }
 .tab-content.active { display: block; }
+
+/* === Mobilebar & scrim (≤960px drawer) === */
+.mobilebar {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  height: var(--mobilebar-height);
+  padding: 0 12px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--canvas);
+  flex-shrink: 0;
+}
+
+.icon-btn {
+  width: 40px;                            /* button-icon-circular */
+  height: 40px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--surface-soft);
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.icon-btn:hover { background: var(--hairline); }
+.icon-btn:active { transform: scale(0.96); }
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);         /* overlay-scrim ~60% */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  z-index: 30;
+}
+.scrim.show { opacity: 1; pointer-events: auto; }
+
+/* subtle scrollbars */
+.workspace::-webkit-scrollbar, .sidebar::-webkit-scrollbar { width: 8px; }
+.workspace::-webkit-scrollbar-thumb, .sidebar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius-full);
+}
+.workspace::-webkit-scrollbar-track, .sidebar::-webkit-scrollbar-track { background: transparent; }
 
 /* === Card (Figma pricing-card: white, hairline, radius-lg, no shadow) === */
 .card {
@@ -150,6 +298,10 @@ body {
   grid-template-columns: 360px 1fr;
   gap: 24px;
   align-items: start;
+}
+
+@media (max-width: 1160px) {
+  .trace-layout { grid-template-columns: 300px 1fr; }
 }
 
 @media (max-width: 800px) {
@@ -207,8 +359,6 @@ body {
   display: block;
 }
 
-.hidden { display: none !important; }
-
 /* === Parameters === */
 .params {
   display: flex;
@@ -235,7 +385,6 @@ body {
 .param-row input[type="number"],
 .search-input,
 .size-inputs input,
-.api-key-input,
 .color-picker-input {
   background: var(--canvas);
   border: 1px solid var(--hairline);
@@ -264,7 +413,6 @@ body {
 .param-row select:focus,
 .param-row input[type="number"]:focus,
 .size-inputs input:focus,
-.api-key-input:focus,
 .color-picker-input:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08);
@@ -523,19 +671,6 @@ body {
   padding-top: 12px;
 }
 
-/* === Footer === */
-.footer {
-  text-align: center;
-  padding: 48px 24px;
-  font-size: 14px;
-  font-weight: 330;
-  color: var(--ink);
-  border-top: 1px solid var(--hairline);
-}
-
-.footer a { color: var(--ink); font-weight: 480; text-decoration: none; }
-.footer a:hover { text-decoration: underline; }
-
 /* === 潘通色卡（palette results） === */
 .palette-results {
   margin-top: 12px;
@@ -571,43 +706,44 @@ body {
 .palette-actions { margin-top: 12px; text-align: right; }
 .palette-actions .btn { width: auto; }
 
-/* === API Key 输入 === */
-.api-key-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-}
-.api-key-input {
-  width: 160px;
-  padding: 8px 12px;
-  font-size: 14px;
-}
-
 /* ============================================================
-   Responsive — Figma breakpoints
+   Responsive — Figma breakpoints（960px tablet → drawer）
    ============================================================ */
 
 @media (max-width: 1024px) {
-  .main { padding: 32px 20px; }
+  .main { padding: 32px 24px; }
   .card { padding: 24px; }
+}
+
+/* ≤960px: sidebar → off-canvas drawer（DSH mobile 行为） */
+@media (max-width: 960px) {
+  .app { flex-direction: column; }
+
+  .mobilebar { display: flex; }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 40;
+    width: 280px;
+    transform: translateX(-105%);
+    transition: transform 0.25s ease;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 0 0 48px rgba(0, 0, 0, 0.16);
+  }
+  .sidebar-close { display: inline-flex; }
 }
 
 @media (max-width: 768px) {
   body { font-size: 15px; }
 
-  .header { padding: 0 16px; }
-  .header-inner { gap: 10px; height: 52px; }
-  .logo { font-size: 17px; gap: 6px; }
-  .api-key-row { gap: 4px; }
-  .api-key-input { width: 110px; }
-
   .main { padding: 20px 14px; }
   .card { padding: 18px; border-radius: 16px; }
   .card-header h2 { font-size: 20px; }
-
-  .tabs { overflow-x: auto; padding: 3px; margin-bottom: 16px; }
-  .tab { flex: 1 0 auto; padding: 8px 12px; font-size: 14px; }
 
   .upload-zone { min-height: 150px; }
   .upload-icon { width: 44px; height: 44px; }
@@ -634,8 +770,6 @@ body {
 
   .cost-form { max-width: none; }
   .cost-result { padding: 14px; }
-
-  .footer { padding: 24px 16px; font-size: 13px; }
 }
 
 /* === 潘通色卡（swatch-card） === */
