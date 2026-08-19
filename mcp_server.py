@@ -46,12 +46,28 @@ def _delta_e(hex_color: str, cmyk) -> float:
 
 def _check_ext(image_path: str) -> str | None:
     """校验文件扩展名，非法返回错误 JSON"""
-    if not image_path.lower().endswith(ALLOWED_EXT):
+    if not image_path or not image_path.lower().endswith(ALLOWED_EXT):
         return json.dumps(
             {"error": f"不支持的文件类型，允许: {', '.join(ALLOWED_EXT)}"},
             ensure_ascii=False,
         )
     return None
+
+
+# 合法枚举值（与 Web API _trace_parameters() 保持一致）
+_VALID_COLORMODES = ("rgb8", "rgb16", "mono", "grey", "grey16")
+_VALID_HIERARCHICAL = ("flat", "stacked")
+
+
+def _sanitize_trace_params(kwargs: dict) -> dict:
+    """校验描图参数，非法值回退默认（与 Web API 行为一致）"""
+    cm = kwargs.get("colormode", "rgb8")
+    if cm not in _VALID_COLORMODES:
+        kwargs["colormode"] = "rgb8"
+    hi = kwargs.get("hierarchical", "stacked")
+    if hi not in _VALID_HIERARCHICAL:
+        kwargs["hierarchical"] = "stacked"
+    return kwargs
 
 
 # ============================================================
@@ -91,19 +107,14 @@ def trace_image(
     err = _check_ext(image_path)
     if err:
         return err
+    p = _sanitize_trace_params({
+        "mode": mode, "colormode": colormode, "hierarchical": hierarchical,
+        "filter_speckle": filter_speckle, "color_precision": color_precision,
+        "layer_difference": layer_difference, "corner_threshold": corner_threshold,
+        "length_threshold": length_threshold, "path_precision": path_precision,
+    })
     try:
-        svg_path = sdk.trace(
-            image_path,
-            mode=mode,
-            colormode=colormode,
-            hierarchical=hierarchical,
-            filter_speckle=filter_speckle,
-            color_precision=color_precision,
-            layer_difference=layer_difference,
-            corner_threshold=corner_threshold,
-            length_threshold=length_threshold,
-            path_precision=path_precision,
-        )
+        svg_path = sdk.trace(image_path, **p)
         return json.dumps({"success": True, "svg_path": svg_path}, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": f"描图失败: {e}"}, ensure_ascii=False)
@@ -205,20 +216,19 @@ def cutout_then_trace(
         return err
     if model not in REMBG_MODELS:
         model = "silueta"
+    p = _sanitize_trace_params({
+        "colormode": colormode, "hierarchical": hierarchical,
+        "filter_speckle": filter_speckle, "color_precision": color_precision,
+        "layer_difference": layer_difference, "corner_threshold": corner_threshold,
+        "length_threshold": length_threshold, "path_precision": path_precision,
+    })
     try:
         svg_path = sdk.cutout_then_trace(
             image_path,
             model=model,
             alpha_matting=alpha_matting,
             mode=trace_mode,
-            colormode=colormode,
-            hierarchical=hierarchical,
-            filter_speckle=filter_speckle,
-            color_precision=color_precision,
-            layer_difference=layer_difference,
-            corner_threshold=corner_threshold,
-            length_threshold=length_threshold,
-            path_precision=path_precision,
+            **p,
         )
         return json.dumps({"success": True, "svg_path": svg_path}, ensure_ascii=False)
     except Exception as e:
@@ -364,14 +374,17 @@ def quote_print(
         JSON: {success, result: {ink_cost_usd, setup_cost_usd, total_cost_usd,
                cost_per_unit_usd, currency, breakdown}}
     """
-    result = print_cost_estimate(
-        width_mm=width_mm,
-        height_mm=height_mm,
-        quantity=qty,
-        num_colors=colors,
-        paper_gsm=gsm,
-        print_method=method,
-    )
+    try:
+        result = print_cost_estimate(
+            width_mm=width_mm,
+            height_mm=height_mm,
+            quantity=qty,
+            num_colors=colors,
+            paper_gsm=gsm,
+            print_method=method,
+        )
+    except Exception as e:
+        return json.dumps({"error": f"报价失败: {e}"}, ensure_ascii=False)
     payload = {
         "ink_cost_usd": result["ink_cost"],
         "setup_cost_usd": result["setup_cost"],
@@ -472,19 +485,14 @@ def trace_and_match(
     err = _check_ext(image_path)
     if err:
         return err
+    p = _sanitize_trace_params({
+        "mode": mode, "colormode": colormode, "hierarchical": hierarchical,
+        "filter_speckle": filter_speckle, "color_precision": color_precision,
+        "layer_difference": layer_difference, "corner_threshold": corner_threshold,
+        "length_threshold": length_threshold, "path_precision": path_precision,
+    })
     try:
-        svg_path = sdk.trace(
-            image_path,
-            mode=mode,
-            colormode=colormode,
-            hierarchical=hierarchical,
-            filter_speckle=filter_speckle,
-            color_precision=color_precision,
-            layer_difference=layer_difference,
-            corner_threshold=corner_threshold,
-            length_threshold=length_threshold,
-            path_precision=path_precision,
-        )
+        svg_path = sdk.trace(image_path, **p)
     except Exception as e:
         return json.dumps({"error": f"描图失败: {e}"}, ensure_ascii=False)
 
