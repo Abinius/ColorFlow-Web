@@ -215,11 +215,18 @@ def _trace_svg(image_bytes, image_format, params):
     if mode == "cutout":
         trace_kwargs = {k: params[k] for k in _TRACE_SDK_KEYS if k in params}
         trace_kwargs["mode"] = "color"  # VTracer 不接受 cutout
-        svg_bytes = sdk.cutout_then_trace_bytes(
-            image_bytes,
-            model="silueta",  # 轻量模型，质量/速度均衡；可扩展 UI 选择
-            **trace_kwargs,
-        )
+        # 复用缓存 session 抠图 → 透明 RGBA；VTracer 忽略 alpha，需先合成白底
+        rgba = _rembg_cutout(image_bytes, model="silueta")
+        import io as _bio
+
+        flat = _bio.BytesIO()
+        from PIL import Image as _PILImage
+
+        white_bg = _PILImage.new("RGB", rgba.size, (255, 255, 255))
+        white_bg.paste(rgba, mask=rgba.split()[3])
+        flat_buf = _bio.BytesIO()
+        white_bg.save(flat_buf, format="PNG")
+        svg_bytes = sdk.trace_bytes(flat_buf.getvalue(), image_format="png", **trace_kwargs)
         return _strip_white_paths(svg_bytes), True  # 抠图恒透明
     else:
         svg_bytes = sdk.trace_bytes(
@@ -230,6 +237,49 @@ def _trace_svg(image_bytes, image_format, params):
         if ignore_white:
             svg_bytes = _strip_white_paths(svg_bytes)
         return svg_bytes, False
+
+
+# === rembg 抠图（session 缓存） ===
+#
+# 背景：cutout_image() 每次调用都会 new_session() 重新加载 42MB ONNX 模型，
+# 在服务器上会导致每次抠图耗时数秒 + 内存峰值高，低配服务器易超时/崩溃，
+# 前端表现为 "TypeError: Failed to fetch"（连接被重置，不是 HTTP 错误）。
+# 解决：全局缓存 rembg session，模型只加载一次，后续请求直接复用。
+import threading as _threading
+
+_rembg_session = None
+_rembg_session_lock = _threading.Lock()
+
+
+def _get_rembg_session(model="silueta"):
+    """获取（并缓存）rembg session，避免每次请求重新加载模型"""
+    global _rembg_session
+    if _rembg_session is None:
+        with _rembg_session_lock:
+            if _rembg_session is None:
+                from rembg import new_session
+
+                _rembg_session = new_session(model)
+    return _rembg_session
+
+
+def _rembg_cutout(image_bytes, model="silueta"):
+    """位图字节 → rembg 抠图 → 透明底 RGBA PIL Image（复用缓存 session）"""
+    import io as _bio
+
+    from rembg import remove as _rembg_remove
+
+    session = _get_rembg_session(model)
+    result = _rembg_remove(image_bytes, session=session)
+    return _bio_open_rgba(result)
+
+
+def _bio_open_rgba(data):
+    import io as _bio
+
+    from PIL import Image
+
+    return Image.open(_bio.BytesIO(data)).convert("RGBA")
 
 
 @app.route("/api/cutout", methods=["POST"])
@@ -246,10 +296,7 @@ def cutout_api():
 
         from PIL import Image
 
-        from colorflow_sdk import cutout as _cutout_mod
-
-        img = Image.open(_b.BytesIO(image_bytes))
-        rgba = _cutout_mod.cutout_image(img, model="silueta")  # 透明底 RGBA
+        rgba = _rembg_cutout(image_bytes)  # 复用缓存 session
         buf = _b.BytesIO()
         rgba.save(buf, format="PNG")
         png_bytes = buf.getvalue()
