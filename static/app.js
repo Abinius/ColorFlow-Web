@@ -277,9 +277,6 @@ colorMatchBtn.addEventListener('click', async () => {
         </div>
       </div>`;
     });
-    html += `<div class="palette-actions">
-      <button class="btn btn-small btn-accent" id="fillQuoteBtn">按 ${data.color_count} 色填入报价</button>
-    </div>`;
     paletteResults.innerHTML = html;
 
     // 展开/收起 top-3 匹配
@@ -290,17 +287,6 @@ colorMatchBtn.addEventListener('click', async () => {
         btn.textContent = more.classList.contains('hidden')
           ? `全部匹配 (${data.palette[Number(btn.dataset.i)].pantone_matches.length})` : '收起';
       });
-    });
-
-    // 「填入报价」：切到报价 Tab、按色数报价
-    document.getElementById('fillQuoteBtn').addEventListener('click', () => {
-      const qty = data.color_count || 4;
-      const select = document.getElementById('printColors');
-      const opts = Array.from(select.options).map(o => parseInt(o.value));
-      const nearest = opts.reduce((best, v) => Math.abs(v - qty) < Math.abs(best - qty) ? v : best);
-      select.value = String(nearest);
-      document.querySelector('.tab[data-tab="cost"]').click();
-      document.getElementById('costBtn').click();
     });
   } catch (e) {
     paletteResults.innerHTML = `<div class="match-placeholder" style="color:var(--error)">请求失败: ${escapeHtml(e)}</div>`;
@@ -396,46 +382,5 @@ matchBtn.addEventListener('click', async () => {
 });
 
 // === Print Cost ===
-const costBtn = document.getElementById('costBtn');
-const costResult = document.getElementById('costResult');
-
-costBtn.addEventListener('click', async () => {
-  costResult.classList.add('hidden');
-  costResult.innerHTML = '<div class="match-placeholder">计算中...</div>';
-  costResult.classList.remove('hidden');
-
-  try {
-    const resp = await apiFetch('/api/cost/quote', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        width: parseFloat(document.getElementById('printWidth').value),
-        height: parseFloat(document.getElementById('printHeight').value),
-        qty: parseInt(document.getElementById('printQty').value),
-        colors: parseInt(document.getElementById('printColors').value),
-        gsm: parseInt(document.getElementById('printGsm').value),
-        method: document.getElementById('printMethod').value,
-      }),
-    });
-    const data = await resp.json();
-    if (data.success) {
-      const r = data.result;
-      let html = '<table>';
-      html += `<tr><td>油墨 (Ink)</td><td>$${r.ink_cost_usd || 'N/A'}</td></tr>`;
-      html += `<tr><td>版材 (Plates)</td><td>$${r.breakdown?.plates || 'N/A'}</td></tr>`;
-      html += `<tr><td>调机 (Makeready)</td><td>$${r.breakdown?.makeready || 'N/A'}</td></tr>`;
-      html += `<tr><td>印刷 (Run)</td><td>$${r.breakdown?.run_cost || 'N/A'}</td></tr>`;
-      html += `<tr class="total-row"><td>总计 (Total)</td><td>$${r.total_cost_usd?.toFixed(2) || 'N/A'}</td></tr>`;
-      html += `<tr><td>单价 (Per Unit)</td><td>$${r.cost_per_unit_usd?.toFixed(4) || 'N/A'}</td></tr>`;
-      html += '</table>';
-      costResult.innerHTML = html;
-    } else {
-      costResult.innerHTML = `<div class="error-msg">${escapeHtml(data.error)}</div>`;
-    }
-  } catch (e) {
-    costResult.innerHTML = `<div class="error-msg">请求失败: ${escapeHtml(e)}</div>`;
-  }
-});
-
 // Initial color match load
 matchBtn.click();

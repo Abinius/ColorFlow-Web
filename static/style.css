@@ -660,43 +660,6 @@ body {
 .match-de.fair { background: var(--block-cream); color: #6d5810; }
 .match-de.poor { background: var(--block-coral); color: #8a2a1a; }
 
-/* === Cost Form === */
-.cost-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  max-width: 500px;
-}
-
-.cost-result {
-  margin-top: 20px;
-  background: var(--block-lime);   /* color-block moment: lime FAQ/story panel */
-  border-radius: var(--radius-lg);
-  padding: 20px;
-}
-
-.cost-result table { width: 100%; border-collapse: collapse; }
-
-.cost-result td {
-  padding: 8px 0;
-  font-size: 16px;
-  font-weight: 330;
-  color: var(--ink);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
-}
-
-.cost-result td:last-child {
-  text-align: right;
-  font-weight: 480;
-}
-
-.cost-result .total-row td {
-  font-size: 18px;
-  font-weight: 700;
-  border: none;
-  padding-top: 12px;
-}
-
 /* === 潘通色卡（palette results） === */
 .palette-results {
   margin-top: 12px;
@@ -793,9 +756,6 @@ body {
   .color-name { font-size: 20px; }
 
   .match-item { flex-wrap: wrap; }
-
-  .cost-form { max-width: none; }
-  .cost-result { padding: 14px; }
 }
 
 /* === 潘通色卡（swatch-card） === */

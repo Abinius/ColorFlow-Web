@@ -57,10 +57,6 @@
           <svg class="nav-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6" cy="8" r="4.2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="10" cy="8" r="4.2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
           色彩匹配
         </button>
-        <button class="tab" data-tab="cost">
-          <svg class="nav-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h9V14l-1.5-1-1.5 1-1.5-1-1.5 1-1.5-1L3.5 14z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M5.5 5.5h5M5.5 8.5h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-          印刷报价
-        </button>
       </nav>
 
       <div class="sidebar-settings">
@@ -211,56 +207,6 @@
             <div class="match-results" id="matchResults">
               <div class="match-placeholder">输入 HEX 颜色进行匹配...</div>
             </div>
-          </div>
-        </section>
-
-        <!-- Tab: Print Cost -->
-        <section class="tab-content" id="tab-cost">
-          <div class="card">
-            <div class="card-header">
-              <h2>印刷报价计算</h2>
-              <p class="card-desc">基于 mcp-print 计算全链路印刷成本</p>
-            </div>
-            <div class="cost-form">
-              <div class="param-row">
-                <label>印刷方式</label>
-                <select id="printMethod">
-                  <option value="offset" selected>胶印 (Offset)</option>
-                  <option value="flexo">柔版 (Flexo)</option>
-                  <option value="gravure">凹版 (Gravure)</option>
-                  <option value="screen">丝网 (Screen)</option>
-                  <option value="digital">数码 (Digital)</option>
-                </select>
-              </div>
-              <div class="param-row">
-                <label>尺寸 (mm)</label>
-                <div class="size-inputs">
-                  <input type="number" id="printWidth" value="210" placeholder="宽" />
-                  <span>×</span>
-                  <input type="number" id="printHeight" value="297" placeholder="高" />
-                </div>
-              </div>
-              <div class="param-row">
-                <label>颜色数</label>
-                <select id="printColors">
-                  <option value="1">1 色</option>
-                  <option value="2">2 色</option>
-                  <option value="4" selected>4 色 (CMYK)</option>
-                  <option value="5">5 色 (CMYK + 专色)</option>
-                  <option value="6">6 色</option>
-                </select>
-              </div>
-              <div class="param-row">
-                <label>纸张克重 (gsm)</label>
-                <input type="number" id="printGsm" value="120" min="50" max="400" />
-              </div>
-              <div class="param-row">
-                <label>数量</label>
-                <input type="number" id="printQty" value="1000" min="1" />
-              </div>
-              <button class="btn btn-primary" id="costBtn">计算报价</button>
-            </div>
-            <div class="cost-result hidden" id="costResult"></div>
           </div>
         </section>
       </div>
