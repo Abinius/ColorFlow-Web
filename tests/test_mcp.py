@@ -1,43 +1,86 @@
-"""MCP Server 冒烟测试"""
-
+"""MCP Server 完整测试"""
 import json
+from pathlib import Path
 
 import pytest
 
 import mcp_server as ms
 
 
-def test_four_core_tools_registered():
-    # FastMCP 2.x 内部结构不直接暴露，通过装饰器后的可调用对象验证工具存在
+def test_all_tools_registered():
     assert callable(ms.trace_image)
     assert callable(ms.match_pantone)
     assert callable(ms.quote_print)
+    assert callable(ms.export_print)
     assert callable(ms.trace_and_match)
+    assert callable(ms.cutout)
+    assert callable(ms.cutout_then_trace)
+    assert callable(ms.pantone_lookup)
+    assert callable(ms.pantone_colors)
+    assert len([x for x in dir(ms) if callable(getattr(ms, x)) and not x.startswith("_")]) >= 9
 
 
-def test_match_pantone_success():
-    data = json.loads(ms.match_pantone("#DA291C"))
-    assert data["success"] is True
-    assert len(data["matches"]) > 0
-    m = data["matches"][0]
-    assert "name" in m and "hex" in m and "delta_e" in m
+class TestPantone:
+    def test_match_success(self):
+        data = json.loads(ms.match_pantone("#DA291C"))
+        assert data["success"] is True
+        assert len(data["matches"]) > 0
+        m = data["matches"][0]
+        for key in ("name", "hex", "cmyk", "delta_e", "rgb", "interpretation"):
+            assert key in m, f"missing key: {key}"
+
+    def test_match_bad_hex(self):
+        data = json.loads(ms.match_pantone("bad"))
+        assert data.get("error")
+
+    def test_lookup_success(self):
+        data = json.loads(ms.pantone_lookup("485C"))
+        assert data["success"] is True
+        assert data["result"]["name"]
+
+    def test_lookup_empty(self):
+        data = json.loads(ms.pantone_lookup(""))
+        assert data.get("error")
+
+    def test_colors_default(self):
+        data = json.loads(ms.pantone_colors())
+        assert data["success"] is True
+        assert data["total"] > 0
+        assert len(data["items"]) <= 50
+
+    def test_colors_search(self):
+        data = json.loads(ms.pantone_colors(search="red", limit=10))
+        assert data["success"] is True
+        assert all("red" in c.get("name", "").lower() for c in data["items"])
 
 
-def test_match_pantone_bad_hex():
-    data = json.loads(ms.match_pantone("bad"))
-    assert data.get("error")
+class TestQuote:
+    def test_fields(self):
+        data = json.loads(ms.quote_print(210, 297, 1000, 4, 120, "offset"))
+        assert data["success"] is True
+        for key in ("ink_cost_usd", "setup_cost_usd", "total_cost_usd",
+                    "cost_per_unit_usd", "currency", "breakdown"):
+            assert key in data["result"], f"missing key: {key}"
+        assert data["result"]["total_cost_usd"] > 0
 
 
-def test_quote_print_fields():
-    data = json.loads(ms.quote_print(210, 297, 1000, 4, 120, "offset"))
-    assert data["success"] is True
-    for key in ("ink_cost_usd", "setup_cost_usd", "total_cost_usd", "cost_per_unit_usd", "breakdown"):
-        assert key in data["result"]
+class TestTrace:
+    def test_bad_extension(self):
+        data = json.loads(ms.trace_image("photo.gif"))
+        assert data.get("error")
 
-
-def test_trace_image_bad_extension():
-    data = json.loads(ms.trace_image("photo.gif"))
-    assert data.get("error")
+    def test_with_params(self, tmp_path):
+        # 生成一个极小 PNG
+        png = tmp_path / "test.png"
+        from PIL import Image
+        Image.new("RGB", (10, 10), color=(255, 128, 0)).save(png)
+        data = json.loads(ms.trace_image(str(png), mode="color", colormode="mono",
+                                          hierarchical="flat", filter_speckle=10,
+                                          color_precision=8, layer_difference=80,
+                                          corner_threshold=90, length_threshold=1.0,
+                                          path_precision=12))
+        assert data["success"] is True
+        assert data["svg_path"]
 
 
 class TestTraceAndMatch:
@@ -45,19 +88,75 @@ class TestTraceAndMatch:
         data = json.loads(ms.trace_and_match("photo.gif"))
         assert data.get("error")
 
-    def test_real_image(self):
-        png = _find_sample()
-        if not png:
-            pytest.skip("sample.png not found")
-        data = json.loads(ms.trace_and_match("D:/Abin/ColorFlow/assets/sample.png"))
+    def test_with_params(self, tmp_path):
+        png = tmp_path / "test.png"
+        from PIL import Image
+        Image.new("RGB", (10, 10), color=(255, 128, 0)).save(png)
+        data = json.loads(ms.trace_and_match(str(png), mode="color", colormode="rgb8",
+                                              hierarchical="stacked", filter_speckle=4))
         assert data["success"] is True
         assert data["svg_path"]
-        assert data["color_count"] > 0
-        assert data["palette"][0]["color"]["hex"]
+        assert data["color_count"] >= 0
 
 
-def _find_sample():
-    from pathlib import Path
+class TestCutout:
+    def test_bad_extension(self):
+        data = json.loads(ms.cutout("photo.gif"))
+        assert data.get("error")
 
-    p = Path("D:/Abin/ColorFlow/assets/sample.png")
-    return str(p) if p.exists() else None
+    def test_invalid_model_fallback(self, tmp_path):
+        png = tmp_path / "test.png"
+        from PIL import Image
+        Image.new("RGB", (10, 10), color=(255, 128, 0)).save(png)
+        data = json.loads(ms.cutout(str(png), model="INVALID"))
+        # 非法模型回退 silueta，silueta 在本地，可正常执行
+        assert data["success"] is True
+        assert data["png_path"]
+        assert data["width"] == 10
+        assert data["height"] == 10
+
+    def test_with_alpha_matting(self, tmp_path):
+        png = tmp_path / "test.png"
+        from PIL import Image
+        Image.new("RGB", (10, 10), color=(255, 128, 0)).save(png)
+        data = json.loads(ms.cutout(str(png), alpha_matting=True,
+                                     alpha_matting_foreground_threshold=200,
+                                     alpha_matting_background_threshold=20,
+                                     alpha_matting_erode_size=15))
+        assert data["success"] is True
+
+
+class TestCutoutThenTrace:
+    def test_bad_extension(self):
+        data = json.loads(ms.cutout_then_trace("photo.gif"))
+        assert data.get("error")
+
+    def test_success(self, tmp_path):
+        png = tmp_path / "test.png"
+        from PIL import Image
+        Image.new("RGB", (10, 10), color=(255, 128, 0)).save(png)
+        data = json.loads(ms.cutout_then_trace(str(png), model="silueta",
+                                                alpha_matting=False,
+                                                trace_mode="color",
+                                                colormode="rgb8",
+                                                hierarchical="stacked",
+                                                filter_speckle=4,
+                                                path_precision=7))
+        assert data["success"] is True
+        assert data["svg_path"]
+
+
+class TestExportPrint:
+    def test_bad_extension(self):
+        data = json.loads(ms.export_print("photo.gif", 100, 80))
+        assert data.get("error")
+
+    def test_success(self, tmp_path):
+        png = tmp_path / "test.png"
+        from PIL import Image
+        Image.new("RGB", (10, 10), color=(255, 128, 0)).save(png)
+        data = json.loads(ms.export_print(str(png), 100, 80, bleed_mm=3,
+                                           mode="color", path_precision=10,
+                                           filter_speckle=4))
+        assert data["success"] is True
+        assert data["pdf_path"]

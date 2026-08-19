@@ -1,4 +1,4 @@
-"""ColorFlow MCP Server — 让 AI Agent 直接调用描图 / Pantone 匹配 / 印刷报价能力。
+"""ColorFlow MCP Server — 让 AI Agent 直接调用描图 / 抠图 / Pantone 匹配 / 印刷报价。
 
 运行方式：
     mcp run mcp_server.py            # 或
@@ -14,11 +14,14 @@ import math
 from fastmcp import FastMCP
 
 from colorflow_sdk import extract_svg_colors
+from colorflow_sdk.exceptions import ValidationError
 from mcp_print.tools.colors import (
     _cmyk_to_lab,
     _hex_to_rgb,
+    _load_db,
     _rgb_to_lab,
     pantone_search,
+    pantone_to_cmyk,
 )
 from mcp_print.tools.cost import print_cost_estimate
 
@@ -29,6 +32,9 @@ mcp = FastMCP("ColorFlow")
 
 # 允许的图片扩展名
 ALLOWED_EXT = (".png", ".jpg", ".jpeg", ".webp", ".bmp")
+# 可用抠图模型清单
+REMBG_MODELS = ("silueta", "u2net", "u2net_human_seg", "u2netp", "dis_anime",
+                "dis_general_use", "withoutbg", "bria-rmbg")
 
 
 def _delta_e(hex_color: str, cmyk) -> float:
@@ -38,50 +44,297 @@ def _delta_e(hex_color: str, cmyk) -> float:
     return math.sqrt(sum((a - b) ** 2 for a, b in zip(lab_hex, lab_pantone)))
 
 
-@mcp.tool()
-def trace_image(image_path: str, mode: str = "color") -> str:
-    """将位图（PNG/JPG/WebP/BMP）转换为 SVG 矢量图。
-
-    Args:
-        image_path: 图片文件路径
-        mode: color（彩色）| grey（灰度）| human（人像）
-    Returns:
-        SVG 文件路径
-    """
+def _check_ext(image_path: str) -> str | None:
+    """校验文件扩展名，非法返回错误 JSON"""
     if not image_path.lower().endswith(ALLOWED_EXT):
         return json.dumps(
             {"error": f"不支持的文件类型，允许: {', '.join(ALLOWED_EXT)}"},
             ensure_ascii=False,
         )
-    svg_path = sdk.trace(image_path, mode=mode)
-    return json.dumps({"success": True, "svg_path": svg_path}, ensure_ascii=False)
+    return None
+
+
+# ============================================================
+# 位图 → SVG 矢量描图
+# ============================================================
+
+
+@mcp.tool()
+def trace_image(
+    image_path: str,
+    mode: str = "color",
+    colormode: str = "rgb8",
+    hierarchical: str = "stacked",
+    filter_speckle: int = 4,
+    color_precision: int = 6,
+    layer_difference: int = 64,
+    corner_threshold: int = 60,
+    length_threshold: float = 2.0,
+    path_precision: int = 7,
+) -> str:
+    """将位图（PNG/JPG/WebP/BMP）转换为 SVG 矢量图。
+
+    Args:
+        image_path: 图片文件路径
+        mode: 描图模式 — color（彩色）| grey（灰度）| human（人像）
+        colormode: 颜色深度 — rgb8（默认）| rgb16 | mono（二值化）| grey | grey16
+        hierarchical: 输出层级 — stacked（堆叠）| flat（平面化）
+        filter_speckle: 斑点过滤阈值（1-100），越大过滤越多
+        color_precision: 颜色精度（1-16）
+        layer_difference: 图层距离阈值（1-256）
+        corner_threshold: 角点阈值（1-180）
+        length_threshold: 路径最短长度（0.1-100），越大过滤越多短路径
+        path_precision: 路径精度（1-16），越高质量越高
+    Returns:
+        JSON: {success, svg_path}
+    """
+    err = _check_ext(image_path)
+    if err:
+        return err
+    try:
+        svg_path = sdk.trace(
+            image_path,
+            mode=mode,
+            colormode=colormode,
+            hierarchical=hierarchical,
+            filter_speckle=filter_speckle,
+            color_precision=color_precision,
+            layer_difference=layer_difference,
+            corner_threshold=corner_threshold,
+            length_threshold=length_threshold,
+            path_precision=path_precision,
+        )
+        return json.dumps({"success": True, "svg_path": svg_path}, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": f"描图失败: {e}"}, ensure_ascii=False)
+
+
+# ============================================================
+# 位图抠图
+# ============================================================
+
+
+@mcp.tool()
+def cutout(
+    image_path: str,
+    model: str = "silueta",
+    alpha_matting: bool = False,
+    alpha_matting_foreground_threshold: int = 240,
+    alpha_matting_background_threshold: int = 10,
+    alpha_matting_erode_size: int = 10,
+) -> str:
+    """AI 抠图：移除背景，输出透明底 PNG。
+
+    Args:
+        image_path: 图片文件路径
+        model: 抠图模型 — silueta（默认，快速）| u2net | u2net_human_seg | u2netp
+               | dis_anime | dis_general_use | withoutbg | bria-rmbg
+        alpha_matting: 启用 alpha matting 边缘细化（发丝/半透明场景建议开启）
+        alpha_matting_foreground_threshold: 前景阈值（10-255，默认 240）
+        alpha_matting_background_threshold: 背景阈值（0-245，默认 10）
+        alpha_matting_erode_size: 边缘腐蚀尺寸（1-20，默认 10）
+    Returns:
+        JSON: {success, png_path, width, height}
+    """
+    err = _check_ext(image_path)
+    if err:
+        return err
+    if model not in REMBG_MODELS:
+        model = "silueta"
+    try:
+        png_path = sdk.cutout(
+            image_path,
+            model=model,
+            alpha_matting=alpha_matting,
+            alpha_matting_foreground_threshold=alpha_matting_foreground_threshold,
+            alpha_matting_background_threshold=alpha_matting_background_threshold,
+            alpha_matting_erode_size=alpha_matting_erode_size,
+        )
+        # 读取图片尺寸
+        from PIL import Image
+        with Image.open(png_path) as img:
+            w, h = img.size
+        return json.dumps(
+            {"success": True, "png_path": png_path, "width": w, "height": h},
+            ensure_ascii=False,
+        )
+    except Exception as e:
+        return json.dumps({"error": f"抠图失败: {e}"}, ensure_ascii=False)
+
+
+# ============================================================
+# 抠图 + 描图 一键串联
+# ============================================================
+
+
+@mcp.tool()
+def cutout_then_trace(
+    image_path: str,
+    model: str = "silueta",
+    alpha_matting: bool = False,
+    trace_mode: str = "color",
+    colormode: str = "rgb8",
+    hierarchical: str = "stacked",
+    filter_speckle: int = 4,
+    color_precision: int = 6,
+    layer_difference: int = 64,
+    corner_threshold: int = 60,
+    length_threshold: float = 2.0,
+    path_precision: int = 7,
+) -> str:
+    """一键抠图 + 描图：先移除背景，再合成白底后描图，输出透明底 SVG。
+
+    Args:
+        image_path: 图片文件路径
+        model: 抠图模型 — silueta（默认）| u2net | ...
+        alpha_matting: 抠图时启用 alpha matting 边缘细化
+        trace_mode: 描图模式 — color（默认）| grey | human
+        colormode: 颜色深度 — rgb8（默认）| rgb16 | mono | grey | grey16
+        hierarchical: 输出层级 — stacked（默认）| flat
+        filter_speckle: 斑点过滤（1-100，默认 4）
+        color_precision: 颜色精度（1-16，默认 6）
+        layer_difference: 图层距离（1-256，默认 64）
+        corner_threshold: 角点阈值（1-180，默认 60）
+        length_threshold: 路径最短长度（0.1-100，默认 2.0）
+        path_precision: 路径精度（1-16，默认 7）
+    Returns:
+        JSON: {success, svg_path}
+    """
+    err = _check_ext(image_path)
+    if err:
+        return err
+    if model not in REMBG_MODELS:
+        model = "silueta"
+    try:
+        svg_path = sdk.cutout_then_trace(
+            image_path,
+            model=model,
+            alpha_matting=alpha_matting,
+            mode=trace_mode,
+            colormode=colormode,
+            hierarchical=hierarchical,
+            filter_speckle=filter_speckle,
+            color_precision=color_precision,
+            layer_difference=layer_difference,
+            corner_threshold=corner_threshold,
+            length_threshold=length_threshold,
+            path_precision=path_precision,
+        )
+        return json.dumps({"success": True, "svg_path": svg_path}, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": f"抠图+描图失败: {e}"}, ensure_ascii=False)
+
+
+# ============================================================
+# Pantone 色彩匹配
+# ============================================================
 
 
 @mcp.tool()
 def match_pantone(hex_color: str) -> str:
-    """根据 HEX 颜色匹配最近的 5 个 Pantone 色（含 ΔE 与 CMYK）。
+    """根据 HEX 颜色匹配最近的 5 个 Pantone 色（含 ΔE、CMYK、RGB）。
 
     Args:
         hex_color: HEX 颜色，如 "#DA291C" 或 "DA291C"
     Returns:
-        JSON: {success, matches: [{name, hex, cmyk, delta_e}]}
+        JSON: {success, matches: [{name, hex, cmyk, rgb, delta_e, interpretation}]}
     """
     if not hex_color.startswith("#"):
         hex_color = "#" + hex_color
     if len(hex_color) != 7:
         return json.dumps({"error": "HEX 格式应为 #RRGGBB"}, ensure_ascii=False)
 
+    from mcp_print.tools.colors import cmyk_to_rgb
+
     results = pantone_search(hex_color=hex_color)
-    matches = [
-        {
+    rgb_hex = _hex_to_rgb(hex_color)
+    lab_hex = _rgb_to_lab(*rgb_hex)
+
+    matches = []
+    for m in results.get("matches", [])[:5]:
+        c, mm, y, k = m["c"], m["m"], m["y"], m["k"]
+        lab_pantone = _cmyk_to_lab(c, mm, y, k)
+        de = round(math.sqrt(sum((a - b) ** 2 for a, b in zip(lab_hex, lab_pantone))), 2)
+        interp = (
+            "excellent — imperceptible" if de < 1
+            else "good — barely perceptible" if de < 3
+            else "fair — noticeable" if de < 6
+            else "poor — obvious"
+        )
+        rgb = cmyk_to_rgb(c, mm, y, k)
+        matches.append({
             "name": m["name"],
             "hex": m["hex"],
-            "cmyk": [m["c"], m["m"], m["y"], m["k"]],
-            "delta_e": round(_delta_e(hex_color, (m["c"], m["m"], m["y"], m["k"])), 2),
-        }
-        for m in results.get("matches", [])[:5]
-    ]
+            "cmyk": [c, mm, y, k],
+            "rgb": [rgb["r"], rgb["g"], rgb["b"]],
+            "delta_e": de,
+            "interpretation": interp,
+        })
+
     return json.dumps({"success": True, "hex": hex_color, "matches": matches}, ensure_ascii=False)
+
+
+@mcp.tool()
+def pantone_lookup(name: str) -> str:
+    """按 Pantone 色号精确查询（如 "485C" / "180 C" / "Warm Red"）。
+
+    Args:
+        name: Pantone 色号
+    Returns:
+        JSON: {success, result: {name, hex, c, m, y, k, rgb}}
+    """
+    if not name.strip():
+        return json.dumps({"error": "请提供色号"}, ensure_ascii=False)
+    try:
+        result = pantone_to_cmyk(name.strip())
+        return json.dumps({"success": True, "result": result}, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": f"查询失败: {e}"}, ensure_ascii=False)
+
+
+@mcp.tool()
+def pantone_colors(
+    page: int = 1,
+    limit: int = 50,
+    search: str = "",
+) -> str:
+    """获取 Pantone 色库列表（分页 + 搜索）。
+
+    Args:
+        page: 页码（从 1 开始）
+        limit: 每页数量（1-200，默认 50）
+        search: 搜索关键词（按色名模糊匹配，留空返回全部）
+    Returns:
+        JSON: {success, items: [{name, hex, c, m, y, k, ...}], total, page, pages}
+    """
+    page = max(page, 1)
+    limit = min(max(limit, 1), 200)
+    try:
+        db = _load_db()
+        if search:
+            s = search.lower()
+            db = [c for c in db if s in c.get("name", "").lower()]
+        total = len(db)
+        start = (page - 1) * limit
+        end = start + limit
+        return json.dumps(
+            {
+                "success": True,
+                "items": db[start:end],
+                "total": total,
+                "page": page,
+                "limit": limit,
+                "pages": (total + limit - 1) // limit,
+            },
+            ensure_ascii=False,
+        )
+    except Exception as e:
+        return json.dumps({"error": f"查询失败: {e}"}, ensure_ascii=False)
+
+
+# ============================================================
+# 印刷报价
+# ============================================================
 
 
 @mcp.tool()
@@ -126,6 +379,11 @@ def quote_print(
     return json.dumps({"success": True, "result": payload}, ensure_ascii=False)
 
 
+# ============================================================
+# 印刷 PDF 导出
+# ============================================================
+
+
 @mcp.tool()
 def export_print(
     image_path: str,
@@ -133,6 +391,8 @@ def export_print(
     height_mm: float,
     bleed_mm: float = 3.0,
     mode: str = "color",
+    path_precision: int = 10,
+    filter_speckle: int = 4,
 ) -> str:
     """位图 → 生产印刷级 CMYK PDF（含出血 + 物理尺寸）。
 
@@ -142,14 +402,14 @@ def export_print(
         height_mm: 成品高（毫米）
         bleed_mm: 出血（毫米，默认 3）
         mode: color | grey | human
+        path_precision: 路径精度（印刷级建议 10，默认 10）
+        filter_speckle: 斑点过滤（1-100，默认 4）
     Returns:
         JSON: {success, pdf_path}
     """
-    if not image_path.lower().endswith(ALLOWED_EXT):
-        return json.dumps(
-            {"error": f"不支持的文件类型，允许: {', '.join(ALLOWED_EXT)}"},
-            ensure_ascii=False,
-        )
+    err = _check_ext(image_path)
+    if err:
+        return err
     import tempfile
 
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
@@ -162,30 +422,65 @@ def export_print(
             height_mm=height_mm,
             bleed_mm=bleed_mm,
             mode=mode,
+            path_precision=path_precision,
+            filter_speckle=filter_speckle,
         )
         return json.dumps({"success": True, "pdf_path": pdf_path}, ensure_ascii=False)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         return json.dumps({"error": f"导出失败: {e}"}, ensure_ascii=False)
 
 
+# ============================================================
+# 一键流水线：描图 → 主色 → Pantone 匹配
+# ============================================================
+
+
 @mcp.tool()
-def trace_and_match(image_path: str, mode: str = "color") -> str:
+def trace_and_match(
+    image_path: str,
+    mode: str = "color",
+    colormode: str = "rgb8",
+    hierarchical: str = "stacked",
+    filter_speckle: int = 4,
+    color_precision: int = 6,
+    layer_difference: int = 64,
+    corner_threshold: int = 60,
+    length_threshold: float = 2.0,
+    path_precision: int = 7,
+) -> str:
     """一键流水线：位图 → SVG → 提取主色 → 每个主色匹配 Pantone（含 ΔE）。
 
     Args:
         image_path: 图片文件路径
-        mode: color | grey | human
+        mode: 描图模式 — color（默认）| grey | human
+        colormode: 颜色深度 — rgb8（默认）| rgb16 | mono | grey | grey16
+        hierarchical: 输出层级 — stacked（默认）| flat
+        filter_speckle: 斑点过滤（1-100，默认 4）
+        color_precision: 颜色精度（1-16，默认 6）
+        layer_difference: 图层距离（1-256，默认 64）
+        corner_threshold: 角点阈值（1-180，默认 60）
+        length_threshold: 路径最短长度（0.1-100，默认 2.0）
+        path_precision: 路径精度（1-16，默认 7）
     Returns:
         JSON: {success, svg_path, color_count, palette: [{color, pantone_matches}]}
     """
-    if not image_path.lower().endswith(ALLOWED_EXT):
-        return json.dumps(
-            {"error": f"不支持的文件类型，允许: {', '.join(ALLOWED_EXT)}"},
-            ensure_ascii=False,
-        )
+    err = _check_ext(image_path)
+    if err:
+        return err
     try:
-        svg_path = sdk.trace(image_path, mode=mode)
-    except Exception as e:  # noqa: BLE001
+        svg_path = sdk.trace(
+            image_path,
+            mode=mode,
+            colormode=colormode,
+            hierarchical=hierarchical,
+            filter_speckle=filter_speckle,
+            color_precision=color_precision,
+            layer_difference=layer_difference,
+            corner_threshold=corner_threshold,
+            length_threshold=length_threshold,
+            path_precision=path_precision,
+        )
+    except Exception as e:
         return json.dumps({"error": f"描图失败: {e}"}, ensure_ascii=False)
 
     with open(svg_path, "rb") as f:
