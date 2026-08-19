@@ -116,6 +116,92 @@ document.querySelectorAll('.tab').forEach(tab => {
   });
 });
 
+// === Cutout（位图抠图） ===
+const cutoutUploadZone = document.getElementById('cutoutUploadZone');
+const cutoutFile = document.getElementById('cutoutFile');
+const cutoutPreviewImg = document.getElementById('cutoutPreviewImg');
+const cutoutBtn = document.getElementById('cutoutBtn');
+const cutoutPreview = document.getElementById('cutoutPreview');
+const cutoutInfo = document.getElementById('cutoutInfo');
+const cutoutSize = document.getElementById('cutoutSize');
+const cutoutDownload = document.getElementById('cutoutDownload');
+
+let currentCutoutBase64 = null;
+
+cutoutUploadZone.addEventListener('click', () => cutoutFile.click());
+cutoutUploadZone.addEventListener('dragover', e => { e.preventDefault(); cutoutUploadZone.classList.add('dragover'); });
+cutoutUploadZone.addEventListener('dragleave', () => cutoutUploadZone.classList.remove('dragover'));
+cutoutUploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  cutoutUploadZone.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) {
+    cutoutFile.files = e.dataTransfer.files;
+    handleCutoutFile(e.dataTransfer.files[0]);
+  }
+});
+
+cutoutFile.addEventListener('change', e => {
+  if (e.target.files[0]) handleCutoutFile(e.target.files[0]);
+});
+
+function handleCutoutFile(file) {
+  if (!file.type.startsWith('image/')) {
+    alert('请上传图片文件');
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    alert('图片不能超过 10MB');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    cutoutPreviewImg.src = e.target.result;
+    cutoutPreviewImg.classList.remove('hidden');
+    cutoutUploadZone.querySelector('.upload-placeholder').classList.add('hidden');
+    cutoutBtn.disabled = false;
+  };
+  reader.readAsDataURL(file);
+}
+
+cutoutBtn.addEventListener('click', async () => {
+  if (!cutoutFile.files[0]) return;
+  cutoutBtn.disabled = true;
+  cutoutBtn.querySelector('.btn-text').classList.add('hidden');
+  cutoutBtn.querySelector('.btn-loader').classList.remove('hidden');
+  cutoutPreview.innerHTML = '<div class="svg-placeholder">AI 抠图中...</div>';
+  cutoutInfo.classList.add('hidden');
+
+  const formData = new FormData();
+  formData.append('image', cutoutFile.files[0]);
+
+  try {
+    const resp = await apiFetch('/api/cutout', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (data.success) {
+      currentCutoutBase64 = data.png_base64;
+      cutoutPreview.innerHTML = `<img src="data:image/png;base64,${data.png_base64}" alt="抠图结果" />`;
+      cutoutInfo.classList.remove('hidden');
+      cutoutSize.textContent = `${(data.size / 1024).toFixed(1)} KB · ${data.width}×${data.height}`;
+    } else {
+      cutoutPreview.innerHTML = `<div class="svg-placeholder" style="color:var(--error)">错误: ${escapeHtml(data.error)}</div>`;
+    }
+  } catch (e) {
+    cutoutPreview.innerHTML = `<div class="svg-placeholder" style="color:var(--error)">请求失败: ${escapeHtml(e)}</div>`;
+  } finally {
+    cutoutBtn.disabled = false;
+    cutoutBtn.querySelector('.btn-text').classList.remove('hidden');
+    cutoutBtn.querySelector('.btn-loader').classList.add('hidden');
+  }
+});
+
+cutoutDownload.addEventListener('click', () => {
+  if (!currentCutoutBase64) return;
+  const a = document.createElement('a');
+  a.href = 'data:image/png;base64,' + currentCutoutBase64;
+  a.download = 'colorflow_cutout.png';
+  a.click();
+});
+
 // === Vector Trace ===
 const uploadZone = document.getElementById('uploadZone');
 const traceFile = document.getElementById('traceFile');

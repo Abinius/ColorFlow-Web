@@ -232,6 +232,42 @@ def _trace_svg(image_bytes, image_format, params):
         return svg_bytes, False
 
 
+@app.route("/api/cutout", methods=["POST"])
+def cutout_api():
+    """位图抠图：上传图片 → rembg 移除背景 → 透明 PNG（base64）"""
+    upload, err = _get_uploaded_image()
+    if err:
+        return err
+
+    image_bytes, _image_format = upload
+
+    try:
+        import io as _b
+
+        from PIL import Image
+
+        from colorflow_sdk import cutout as _cutout_mod
+
+        img = Image.open(_b.BytesIO(image_bytes))
+        rgba = _cutout_mod.cutout_image(img, model="silueta")  # 透明底 RGBA
+        buf = _b.BytesIO()
+        rgba.save(buf, format="PNG")
+        png_bytes = buf.getvalue()
+        return jsonify(
+            {
+                "success": True,
+                "png_base64": base64.b64encode(png_bytes).decode("utf-8"),
+                "size": len(png_bytes),
+                "width": rgba.width,
+                "height": rgba.height,
+            }
+        )
+    except ValidationError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/trace", methods=["POST"])
 def trace_image():
     """位图 → SVG 矢量描图（mode=cutout 时为抠图）"""

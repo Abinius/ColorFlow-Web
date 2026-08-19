@@ -685,6 +685,13 @@ body {
 
 .svg-placeholder { color: var(--muted); font-size: 16px; font-weight: 330; }
 
+/* 抠图透明预览：棋盘格底（体现 alpha 通道） */
+.cutout-preview {
+  background-image:
+    repeating-conic-gradient(var(--hairline-soft) 0% 25%, var(--canvas) 0% 50%);
+  background-size: 16px 16px;
+}
+
 .svg-preview svg,
 .svg-preview img {
   max-width: 100%;
