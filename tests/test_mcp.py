@@ -33,6 +33,11 @@ class TestPantone:
         data = json.loads(ms.match_pantone("bad"))
         assert data.get("error")
 
+    def test_match_invalid_hex_chars(self):
+        # Bug: '#GGGGGG' 长度正确但包含非法十六进制字符，应返回错误而非崩溃
+        data = json.loads(ms.match_pantone("#GGGGGG"))
+        assert data.get("error")
+
     def test_lookup_success(self):
         data = json.loads(ms.pantone_lookup("485C"))
         assert data["success"] is True

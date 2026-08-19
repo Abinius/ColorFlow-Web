@@ -243,6 +243,11 @@ def match_pantone(hex_color: str) -> str:
         hex_color = "#" + hex_color
     if len(hex_color) != 7:
         return json.dumps({"error": "HEX 格式应为 #RRGGBB"}, ensure_ascii=False)
+    # 校验合法十六进制字符，避免下游 _hex_to_rgb 崩溃
+    try:
+        int(hex_color[1:], 16)
+    except ValueError:
+        return json.dumps({"error": "HEX 格式应为 #RRGGBB，包含非法字符"}, ensure_ascii=False)
 
     from mcp_print.tools.colors import cmyk_to_rgb
 
