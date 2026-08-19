@@ -298,6 +298,33 @@ body {
   font-style: italic;
 }
 
+/* === Settings Section Styles === */
+.settings-section {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--hairline-soft);
+}
+.settings-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.settings-desc {
+  font-size: 13px;
+  font-weight: 330;
+  color: var(--muted);
+  margin: 0 0 8px 0;
+}
+.settings-action-btn {
+  width: 100%;
+  justify-content: center;
+}
+.nav-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
 /* Modal 响应式：移动端堆叠 */
 @media (max-width: 640px) {
   .settings-modal-body {

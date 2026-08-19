@@ -77,6 +77,33 @@ if (settingsToggle) settingsToggle.addEventListener('click', openSettingsModal);
 if (settingsClose) settingsClose.addEventListener('click', closeSettingsModal);
 if (settingsBackdrop) settingsBackdrop.addEventListener('click', closeSettingsModal);
 
+// === 通用设置：一键启动 & 清除 API Key ===
+const quickStartBtn = document.getElementById('quickStartBtn');
+const clearApiKeyBtn = document.getElementById('clearApiKeyBtn');
+
+if (quickStartBtn) {
+  quickStartBtn.addEventListener('click', () => {
+    closeSettingsModal();
+    // 切换到矢量描图 Tab
+    const traceTab = document.querySelector('.tab[data-tab="trace"]');
+    if (traceTab) traceTab.click();
+    // 滚动到上传区
+    setTimeout(() => {
+      const uploadZone = document.getElementById('uploadZone');
+      if (uploadZone) uploadZone.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+  });
+}
+
+if (clearApiKeyBtn) {
+  clearApiKeyBtn.addEventListener('click', () => {
+    localStorage.removeItem('colorflow_api_key');
+    if (apiKeyInput) apiKeyInput.value = '';
+    clearApiKeyBtn.textContent = '✓ 已清除';
+    setTimeout(() => { clearApiKeyBtn.textContent = '清除 API Key'; }, 1500);
+  });
+}
+
 // === Tab Navigation ===
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
