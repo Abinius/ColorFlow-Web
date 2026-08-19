@@ -408,6 +408,32 @@ body {
   height: 4px;
 }
 
+/* 复选框行：忽略白色 */
+.param-row-checkbox { flex-wrap: wrap; gap: 6px 12px; }
+.checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 330;
+  color: var(--ink);
+}
+.checkbox-row input[type="checkbox"] {
+  accent-color: var(--primary);
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.param-hint {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 330;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
 /* Focus = ring, not fill change (per Figma text-input-focused) */
 .search-input:focus,
 .param-row select:focus,

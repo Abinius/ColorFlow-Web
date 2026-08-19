@@ -115,6 +115,14 @@
                     <label>路径精度: <span id="precisionVal">7</span></label>
                     <input type="range" id="pathPrecision" min="1" max="16" value="7" />
                   </div>
+                  <div class="param-row param-row-checkbox">
+                    <label>忽略白色</label>
+                    <label class="checkbox-row">
+                      <input type="checkbox" id="ignoreWhite" />
+                      <span>输出透明背景</span>
+                    </label>
+                    <span class="param-hint">去除白底，留透明通道</span>
+                  </div>
                 </div>
                 <button class="btn btn-primary" id="traceBtn" disabled>
                   <span class="btn-text">开始描图</span>

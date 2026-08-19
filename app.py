@@ -124,7 +124,68 @@ def _trace_parameters():
         "layer_difference": _int_arg(request.form.get("layer_difference"), 64),
         "corner_threshold": _int_arg(request.form.get("corner_threshold"), 60),
         "path_precision": _int_arg(request.form.get("path_precision"), 7),
+        # 后端专用开关（不传给 SDK）：描图后去除白色 / 近白 fill 路径，使 SVG 透明
+        "ignore_white": request.form.get("ignore_white", "0") in ("1", "true", "yes"),
     }
+
+
+# === 忽略白色：SVG 后处理 ===
+#
+# VTracer 不支持透明 PNG（alpha 像素会被压成黑色，见 colorflow_sdk/cutout.py
+# composite_on_background 注释），因此「先把输入图白色抠掉再描」走不通。
+# 但 VTracer 输出的 SVG 自身没有显式 background，白色区域其实是一个
+# fill="rgb(255,255,255)" 的底层 <path>——把它移除，SVG 自然就透明。
+#
+# 容差默认 16：JPEG 压缩会让纯白背景变成 #F0F0F0 上下，需要一定宽容度。
+import io as _io
+import re as _re
+import xml.etree.ElementTree as _ET
+
+_RGB_RE = _re.compile(r"rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", _re.I)
+_HEX_RE = _re.compile(r"#([0-9a-f]{3}|[0-9a-f]{6})\b", _re.I)
+
+
+def _parse_svg_color(value):
+    """解析 'rgb(R,G,B)' / '#RRGGBB' / '#RGB' / 'white' → (R,G,B) 元组；不支持的格式返回 None"""
+    if not value:
+        return None
+    v = value.strip().lower()
+    if v == "white":
+        return (255, 255, 255)
+    m = _RGB_RE.match(v)
+    if m:
+        return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    m = _HEX_RE.match(v)
+    if m:
+        h = m.group(1)
+        if len(h) == 3:
+            h = "".join(c * 2 for c in h)
+        return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+    return None
+
+
+def _strip_white_paths(svg_bytes, tolerance=16):
+    """移除 SVG 中 fill 为白色 / 近白（容差内）的 path 元素，返回新字节"""
+    try:
+        root = _ET.fromstring(svg_bytes)
+    except _ET.ParseError:
+        return svg_bytes  # 解析失败 → 原样返回，不影响主流程
+
+    _ET.register_namespace("", "http://www.w3.org/2000/svg")
+    _ET.register_namespace("xlink", "http://www.w3.org/1999/xlink")
+
+    def is_near_white(v):
+        c = _parse_svg_color(v)
+        return c is not None and all(ch >= 255 - tolerance for ch in c)
+
+    for parent in root.iter():
+        to_remove = [ch for ch in parent if is_near_white(ch.get("fill", ""))]
+        for ch in to_remove:
+            parent.remove(ch)
+
+    out = _io.BytesIO()
+    _ET.ElementTree(root).write(out, encoding="utf-8", xml_declaration=True)
+    return out.getvalue()
 
 
 @app.route("/")
@@ -141,6 +202,7 @@ def trace_image():
 
     image_bytes, image_format = upload
     params = _trace_parameters()
+    ignore_white = params.pop("ignore_white", False)  # 后端专用，不传给 SDK
 
     try:
         svg_bytes = sdk.trace_bytes(
@@ -148,6 +210,8 @@ def trace_image():
             image_format=image_format,
             **params,
         )
+        if ignore_white:
+            svg_bytes = _strip_white_paths(svg_bytes)
         # Return as base64 for easier JS handling
         b64 = base64.b64encode(svg_bytes).decode("utf-8")
         return jsonify(
@@ -172,6 +236,7 @@ def trace_colors():
 
     image_bytes, image_format = upload
     params = _trace_parameters()
+    ignore_white = params.pop("ignore_white", False)  # 后端专用，不传给 SDK
 
     try:
         svg_bytes = sdk.trace_bytes(
@@ -179,6 +244,8 @@ def trace_colors():
             image_format=image_format,
             **params,
         )
+        if ignore_white:
+            svg_bytes = _strip_white_paths(svg_bytes)
     except ValidationError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:

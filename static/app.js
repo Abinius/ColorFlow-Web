@@ -133,6 +133,7 @@ traceBtn.addEventListener('click', async () => {
   formData.append('mode', document.getElementById('traceMode').value);
   formData.append('filter_speckle', filterSpeckle.value);
   formData.append('path_precision', pathPrecision.value);
+  formData.append('ignore_white', document.getElementById('ignoreWhite').checked ? '1' : '0');
 
   try {
     const resp = await apiFetch('/api/trace', { method: 'POST', body: formData });
@@ -227,6 +228,7 @@ colorMatchBtn.addEventListener('click', async () => {
   formData.append('mode', document.getElementById('traceMode').value);
   formData.append('filter_speckle', filterSpeckle.value);
   formData.append('path_precision', pathPrecision.value);
+  formData.append('ignore_white', document.getElementById('ignoreWhite').checked ? '1' : '0');
 
   try {
     const resp = await apiFetch('/api/trace/colors', { method: 'POST', body: formData });
