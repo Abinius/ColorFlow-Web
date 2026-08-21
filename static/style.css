@@ -271,37 +271,62 @@ body {
 }
 
 .settings-modal-body {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 0;
-  overflow-y: auto;
+  display: flex;
+  overflow: hidden;
   flex: 1;
 }
 
-.settings-panel {
-  padding: 24px;
+/* === 设置页左侧导航栏 === */
+.settings-nav {
+  width: 200px;
+  flex-shrink: 0;
+  padding: 16px 12px;
   border-right: 1px solid var(--hairline-soft);
+  background: var(--surface-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
 }
-.settings-panel:last-child {
-  border-right: none;
-}
-.settings-panel h3 {
-  font-size: 16px;
-  font-weight: 540;
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
   color: var(--ink);
-  margin: 0 0 16px 0;
-}
-.settings-placeholder {
   font-size: 14px;
-  font-weight: 330;
-  color: var(--muted);
-  font-style: italic;
+  font-weight: 480;
+  letter-spacing: -0.1px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.settings-nav-item:hover:not(.active) { background: rgba(0, 0, 0, 0.05); }
+.settings-nav-item.active {
+  background: var(--primary);
+  color: var(--on-primary);
 }
 
-/* === Settings Section Styles === */
+/* === 设置页右侧内容区 === */
+.settings-content {
+  flex: 1;
+  min-width: 0;
+  padding: 24px 28px;
+  overflow-y: auto;
+  background: var(--canvas);
+}
+.settings-page { display: none; }
+.settings-page.active { display: block; }
+
 .settings-section {
-  margin-bottom: 16px;
-  padding-bottom: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
   border-bottom: 1px solid var(--hairline-soft);
 }
 .settings-section:last-child {
@@ -313,11 +338,22 @@ body {
   font-size: 13px;
   font-weight: 330;
   color: var(--muted);
-  margin: 0 0 8px 0;
+  margin: 0 0 10px 0;
 }
 .settings-action-btn {
-  width: 100%;
-  justify-content: center;
+  width: auto;
+  justify-content: flex-start;
+  display: inline-flex;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: var(--radius-pill);
+}
+.settings-hint {
+  font-size: 12px;
+  font-weight: 330;
+  color: var(--success);
+  margin-top: 8px;
+  letter-spacing: 0;
 }
 .nav-icon {
   width: 16px;
@@ -1100,7 +1136,66 @@ body {
   background: var(--block-mint); color: #156b38;
 }
 
-/* 设置弹窗移动端：3 栏 → 1 栏 */
+/* Modal 响应式：移动端导航栏隐藏，只显示当前页 */
 @media (max-width: 640px) {
-  .settings-modal-body { grid-template-columns: 1fr; }
+  .settings-nav { display: none; }
+  .settings-modal-container {
+    width: 95vw;
+    max-height: 85vh;
+  }
+}
+
+/* ============================================================
+   3D 灰度图 — 亮度直方图
+   ============================================================ */
+.g3d-histogram {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--surface-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+}
+.hist-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.hist-title {
+  font-size: 13px;
+  font-weight: 540;
+  color: var(--ink);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+.hist-meta {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.hist-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  height: 64px;
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 0;
+}
+.hist-bar .hist-bin {
+  flex: 1;
+  background: var(--ink);
+  min-width: 1px;
+  border-radius: 1px 1px 0 0;
+}
+.hist-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.4px;
 }

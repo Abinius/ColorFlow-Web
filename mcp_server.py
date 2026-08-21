@@ -586,6 +586,96 @@ def trace_and_match(
 
 
 # ============================================================
+# 3D 灰度图（高度图 / 位移贴图）
+# ============================================================
+
+
+@mcp.tool()
+def greyscale3d(
+    image_path: str,
+    invert: bool = False,
+    contrast: float = 1.0,
+    gamma: float = 1.0,
+    smooth: float = 0.0,
+    auto_levels: bool = False,
+    bit_depth: int = 8,
+) -> str:
+    """将彩色位图转换为 3D 建模用灰度 PNG（高度图 / 位移贴图）。
+
+    Args:
+        image_path: 图片文件路径（PNG/JPG/WebP/BMP）
+        invert: 是否反色 — True=黑=低/白=高（适合 3D displacement）, False=正色（默认 False）
+        contrast: 对比度增强 0.5-3.0（默认 1.0）
+        gamma: Gamma 校正 0.5-2.0（默认 1.0）
+        smooth: 高斯模糊平滑半径 0-5（默认 0）
+        auto_levels: 自动级别归一化亮度范围（默认 False）
+        bit_depth: 输出位深 8 或 16（默认 8）
+    Returns:
+        JSON: {success, png_path, width, height, bit_depth}
+    """
+    auth = _auth_check()
+    if auth:
+        return auth
+    err = _check_ext(image_path)
+    if err:
+        return err
+
+    contrast = max(0.5, min(3.0, contrast))
+    gamma = max(0.5, min(2.0, gamma))
+    smooth = max(0.0, min(5.0, smooth))
+    bit_depth = 16 if bit_depth == 16 else 8
+
+    try:
+        from PIL import Image, ImageOps, ImageEnhance, ImageFilter
+        import tempfile
+
+        with Image.open(image_path) as img:
+            grey = img.convert("RGB").convert("L")
+
+        # 高斯模糊
+        if smooth > 0:
+            grey = grey.filter(ImageFilter.GaussianBlur(radius=int(smooth)))
+
+        # 自动级别
+        if auto_levels:
+            grey = ImageOps.autocontrast(grey)
+
+        # 对比度
+        if contrast != 1.0:
+            grey = ImageEnhance.Contrast(grey).enhance(contrast)
+
+        # Gamma
+        if gamma != 1.0:
+            curve = [int(round(255 * ((p / 255.0) ** (1.0 / gamma)))) for p in range(256)]
+            grey = grey.point(curve)
+
+        # 反色
+        if invert:
+            grey = ImageOps.invert(grey)
+
+        # 位深转换
+        if bit_depth == 16:
+            grey = grey.point(lambda p: p * 257).convert("I;16")
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            png_path = tmp.name
+        grey.save(png_path, format="PNG")
+
+        return json.dumps(
+            {
+                "success": True,
+                "png_path": png_path,
+                "width": grey.width,
+                "height": grey.height,
+                "bit_depth": bit_depth,
+            },
+            ensure_ascii=False,
+        )
+    except Exception as e:
+        return json.dumps({"error": f"灰度图生成失败: {e}"}, ensure_ascii=False)
+
+
+# ============================================================
 # Pantone 色卡 / 匹配报告 PDF 导出
 # ============================================================
 

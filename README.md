@@ -23,7 +23,9 @@ ColorFlow Web 是 **ColorFlow 矢量描图 SDK** 和 **Pantone 色彩管理** �
 | **印刷 PDF 导出** | 位图 → 生产印刷级 CMYK PDF（含出血 + 物理尺寸） |
 | **Pantone 色卡导出** | 色号查询详情一键导出色卡 PDF；匹配结果导出报告 PDF（CMYK 印刷级）|
 | **API Key 管理** | 设置页一键生成 / 撤销 Key，Web API 与 MCP 共用 |
-| **AI Agent 接入** | 内置 MCP Server（10 工具），Claude Code / Cursor 可直接调用 |
+| **3D 灰度图** | 彩色位图 → 灰度高度图 / 位移贴图（8/16-bit），用于 3D 建模（Blender / 3D 打印 / 深度通道）+ 实时直方图 |
+| **服务重启** | 设置页「重启服务」按钮一键重启 Flask 实例 |
+| **AI Agent 接入** | 内置 MCP Server（11 工具），Claude Code / Cursor 可直接调用 |
 
 ## 技术栈
 
@@ -109,6 +111,27 @@ gunicorn -w 2 -b 0.0.0.0:5000 app:app
 
 详细部署说明见 [DEPLOY.md](DEPLOY.md)。
 
+## 服务重启
+
+### 手动重启
+
+```bash
+# Windows PowerShell
+.\restart.ps1
+```
+
+`restart.ps1` 会自动：
+1. 杀掉 5000 端口旧进程
+2. 启动新 Flask 实例（后台运行）
+
+### API 重启
+
+```bash
+curl -X POST http://localhost:5000/api/restart
+```
+
+或在前端设置页点击「重启服务」按钮。
+
 ## AI Agent 接入（MCP Server）
 
 内置 MCP Server，让 Claude Code / Cursor 等 Agent 直接调用全部能力。
@@ -133,7 +156,7 @@ gunicorn -w 2 -b 0.0.0.0:5000 app:app
 }
 ```
 
-### 可用工具（10 个）
+### 可用工具（11 个）
 
 | Tool | 说明 | 关键参数 |
 |------|------|---------|
@@ -147,6 +170,7 @@ gunicorn -w 2 -b 0.0.0.0:5000 app:app
 | `quote_print` | 印刷全链路报价 | width, height, qty, colors, gsm, method |
 | `export_print` | 位图 → 印刷级 CMYK PDF | width_mm, height_mm, bleed_mm, mode |
 | `export_pantone_pdf` | 色卡 / 匹配报告 PDF | export_type（swatch / report）, 颜色数据 |
+| `greyscale3d` | 位图 → 3D 灰度高度图 / 位移贴图 | invert, contrast, gamma, smooth, auto_levels, bit_depth |
 
 ### Agent 调用示例
 
@@ -167,6 +191,11 @@ Agent: 调用 pantone_lookup("485C")
 Agent: 调用 export_pantone_pdf(export_type="swatch", name="485 C",
          hex_color="#DA291C", cmyk=[0,85,95,5], rgb=[218,41,28])
   → {success, pdf_path}
+
+用户: 「把这张物体照片转成 3D 灰度高度图」
+Agent: 调用 greyscale3d("D:/object.jpg", invert=True, contrast=1.5, gamma=0.9,
+         smooth=1, auto_levels=True, bit_depth=16)
+   → {success, png_path, width, height, bit_depth}
 ```
 
 ## API 接口
@@ -182,6 +211,8 @@ Agent: 调用 export_pantone_pdf(export_type="swatch", name="485 C",
 | `POST` | `/api/cost/quote` | 印刷报价计算 |
 | `POST` | `/api/print/export` | 位图 → 印刷级 CMYK PDF 下载 |
 | `POST` | `/api/pantone/export` | 色卡 / 匹配报告 PDF（CMYK）|
+| `POST` | `/api/grayscale3d` | 位图 → 3D 灰度高度图 / 位移贴图（8/16-bit PNG）|
+| `POST` | `/api/restart` | 触发服务重启（异步启动 restart.ps1）|
 | `POST` | `/api/keys/generate` | 生成新 API Key |
 | `GET` | `/api/keys` | 列出所有 Key（脱敏）|
 | `DELETE` | `/api/keys/<key_id>` | 撤销指定 Key |
@@ -214,6 +245,18 @@ Agent: 调用 export_pantone_pdf(export_type="swatch", name="485 C",
 | `decontaminate` | `1` 清除边缘色晕 | `0` |
 | `post_process_mask` | `1` 二值掩码去噪 | `0` |
 
+### 3D 灰度图请求参数（multipart/form-data）
+
+| 参数 | 说明 | 默认 |
+|------|------|------|
+| `image` | 图片文件（PNG/JPG/WebP/BMP，≤10MB）| 必填 |
+| `invert` | `1` 反色（黑=低 白=高，适合 displacement）| `0` |
+| `contrast` | 对比度增强（0.5-3.0）| `1.0` |
+| `gamma` | Gamma 校正（0.5-2.0）| `1.0` |
+| `smooth` | 高斯模糊半径（0-5）| `0` |
+| `auto_levels` | `1` 自动级别（归一化亮度）| `0` |
+| `bit_depth` | 输出位深：`8` 或 `16` | `8` |
+
 ### 示例
 
 ```bash
@@ -240,10 +283,18 @@ curl -X POST http://localhost:5000/api/keys/generate \
   -H "Content-Type: application/json" \
   -d '{"name": "我的 Agent"}'
 
-# 导出色卡 PDF
-curl -X POST http://localhost:5000/api/pantone/export \
-  -H "Content-Type: application/json" \
-  -d '{"type": "swatch", "name": "485 C", "hex": "#DA291C", "cmyk": [0,85,95,5], "rgb": [218,41,28]}'
+# 3D 灰度高度图
+curl -X POST http://localhost:5000/api/grayscale3d \
+  -F "image=@object.jpg" \
+  -F "invert=1" \
+  -F "contrast=1.5" \
+  -F "gamma=0.9" \
+  -F "smooth=1" \
+  -F "auto_levels=1" \
+  -F "bit_depth=16"
+
+# 重启服务
+curl -X POST http://localhost:5000/api/restart
 ```
 
 ## 错误码
@@ -268,19 +319,20 @@ curl -X POST http://localhost:5000/api/pantone/export \
 
 ```
 colorflow-web/
-├── app.py               # Flask 入口，所有 API 路由 + Key 管理端点
+├── app.py               # Flask 入口，所有 API 路由 + Key 管理端点 + 3D 灰度图 + 服务重启
 ├── colorflow_keys.py    # KeyStore：API Key 生成 / 校验 / 撤销
-├── mcp_server.py        # MCP Server（10 工具 + Key 认证）
+├── mcp_server.py        # MCP Server（11 工具 + Key 认证）
+├── restart.ps1          # 服务重启脚本（杀旧进程 + 拉起新实例）
 ├── templates/
-│   └── index.html      # 单页（抠图 / 描图 / Pantone / 色彩匹配 + 设置页）
+│   └── index.html      # 单页（抠图 / 描图 / Pantone / 色彩匹配 / 3D 灰度图 + 设置页）
 ├── static/
 │   ├── style.css       # Figma DESIGN.md 样式
-│   ├── app.js          # 前端交互 + Key 管理 + MCP 配置
+│   ├── app.js          # 前端交互 + Key 管理 + MCP 配置 + 3D 灰度图
 │   └── favicon.*       # 浏览器图标（ico/png/svg/manifest）
 ├── models/
 │   └── silueta.onnx    # 抠图模型（42MB，随包附带）
 ├── tests/
-│   ├── test_app.py     # API 集成测试 + Key 管理测试
+│   ├── test_app.py     # API 集成测试 + Key 管理测试 + 3D 灰度图测试
 │   └── test_mcp.py     # MCP Server 全工具测试
 ├── start.bat           # Windows 一键启动
 ├── DEPLOY.md           # 部署说明
@@ -291,7 +343,7 @@ colorflow-web/
 
 ```bash
 pip install pytest
-python -m pytest tests/ -q     # 59 个用例
+python -m pytest tests/ -q     # 67 个用例
 ```
 
 ## 相关项目

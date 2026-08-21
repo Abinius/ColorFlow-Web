@@ -18,7 +18,8 @@ def test_all_tools_registered():
     assert callable(ms.pantone_lookup)
     assert callable(ms.pantone_colors)
     assert callable(ms.export_pantone_pdf)
-    assert len([x for x in dir(ms) if callable(getattr(ms, x)) and not x.startswith("_")]) >= 9
+    assert callable(ms.greyscale3d)
+    assert len([x for x in dir(ms) if callable(getattr(ms, x)) and not x.startswith("_")]) >= 10
 
 
 class TestPantone:
@@ -195,3 +196,30 @@ class TestExportPantonePdf:
     def test_invalid_type(self):
         data = json.loads(ms.export_pantone_pdf(export_type="invalid"))
         assert data.get("error")
+
+
+class TestGreyscale3D:
+    """MCP greyscale3d 工具测试"""
+
+    def test_bad_extension(self, tmp_path):
+        data = json.loads(ms.greyscale3d("photo.gif"))
+        assert data.get("error")
+
+    def test_all_params(self, tmp_path):
+        png = tmp_path / "test.png"
+        from PIL import Image
+        Image.new("RGB", (20, 20), color=(255, 128, 0)).save(png)
+        data = json.loads(ms.greyscale3d(
+            str(png),
+            invert=True,
+            contrast=1.5,
+            gamma=0.9,
+            smooth=1,
+            auto_levels=True,
+            bit_depth=16,
+        ))
+        assert data["success"] is True
+        assert data["png_path"]
+        assert data["width"] == 20
+        assert data["height"] == 20
+        assert data["bit_depth"] == 16

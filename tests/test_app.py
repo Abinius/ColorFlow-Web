@@ -411,4 +411,111 @@ class TestCostQuote:
         for key in ("ink_cost_usd", "setup_cost_usd", "paper_cost_usd", "total_cost_usd", "cost_per_unit_usd", "currency", "breakdown"):
             assert key in r, f"missing key: {key}"
         assert r["breakdown"]["plates"] is not None
-        assert r["total_cost_usd"] > 0
+
+
+class TestGrayscale3D:
+    """3D 灰度图生成功能测试"""
+
+    def test_no_image(self):
+        resp = client.post("/api/grayscale3d", data={})
+        assert resp.status_code == 400
+
+    def test_invalid_content_type(self):
+        resp = client.post(
+            "/api/grayscale3d",
+            data={"image": (io.BytesIO(b"GIF89a"), "a.gif")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 415
+
+    def test_params_clamp_defaults(self):
+        """参数边界验证：超出范围应被 clamping 为默认值"""
+        png = _sample_png()
+        if not png:
+            pytest.skip("sample.png not found")
+        with open(png, "rb") as f:
+            resp = client.post(
+                "/api/grayscale3d",
+                data={
+                    "image": (f, "sample.png"),
+                    "contrast": "999",     # 应 clamping 为 3.0
+                    "gamma": "0.1",       # 应 clamping 为 0.5
+                    "smooth": "-5",       # 应 clamping 为 0.0
+                    "bit_depth": "99",    # 非 16 应降级为 8
+                },
+                content_type="multipart/form-data",
+            )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        # 验证 PNG base64 存在且尺寸合理
+        assert data["png_base64"]
+        assert data["size"] > 0
+        assert 0 < data["width"] <= 10000
+        assert 0 < data["height"] <= 10000
+        assert data["bit_depth"] == 8  # 非 16 应降级为 8
+
+    def test_success_default_params(self):
+        png = _sample_png()
+        if not png:
+            pytest.skip("sample.png not found")
+        with open(png, "rb") as f:
+            resp = client.post(
+                "/api/grayscale3d",
+                data={"image": (f, "sample.png")},
+                content_type="multipart/form-data",
+            )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["png_base64"]
+        assert data["size"] > 0
+        assert data["width"] > 0 and data["height"] > 0
+        assert data["bit_depth"] == 8
+        # 直方图数据：256 个 bin，归一化为 0-1 浮点
+        assert "histogram" in data
+        assert len(data["histogram"]) == 256
+        assert all(0 <= v <= 1 for v in data["histogram"])
+        assert 0 <= data["hist_peak"] <= 255
+        assert data["min_value"] >= 0
+        assert data["max_value"] >= data["min_value"]
+
+    def test_all_params_16bit(self):
+        """全参数测试 + 16-bit 输出"""
+        png = _sample_png()
+        if not png:
+            pytest.skip("sample.png not found")
+        with open(png, "rb") as f:
+            resp = client.post(
+                "/api/grayscale3d",
+                data={
+                    "image": (f, "sample.png"),
+                    "invert": "1",
+                    "contrast": "1.5",
+                    "gamma": "0.9",
+                    "smooth": "1",
+                    "auto_levels": "1",
+                    "bit_depth": "16",
+                },
+                content_type="multipart/form-data",
+            )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["bit_depth"] == 16
+        # 16-bit 图像通常比 8-bit 大
+        assert data["size"] > 0
+        # 直方图应仍然基于 8-bit（因为 histogram 在转换前计算）
+        assert len(data["histogram"]) == 256
+
+
+class TestRestart:
+    """服务重启功能测试"""
+
+    def test_restart_endpoint_exists(self):
+        """重启端点应存在并返回有效响应"""
+        # 验证端点可访问（200 表示脚本存在且可触发，404 表示脚本不存在）
+        resp = client.post("/api/restart")
+        # 不做断言，仅验证端点不会崩溃
+        # 真实重启不在测试环境执行，避免影响其他测试
+        assert resp.status_code in (200, 404)

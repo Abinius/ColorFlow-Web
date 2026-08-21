@@ -19,3 +19,6 @@ htmlcov/
 
 # Env
 .env
+
+# rembg 模型缓存（非仓库内置的下载模型）
+models/models/

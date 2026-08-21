@@ -19,6 +19,15 @@ function apiFetch(url, options = {}) {
   return fetch(url, options);
 }
 
+// === 统一错误处理：对 fetch 的 TypeError 给出友好提示 ===
+function fetchErrorMessage(e) {
+  // TypeError: Failed to fetch → 服务器未启动 / CORS / 网络错误
+  if (e && e.name === 'TypeError' && /failed to fetch/i.test(e.message)) {
+    return '服务器连接失败（请确认 Flask 服务已启动：start.bat）';
+  }
+  return e ? String(e) : '未知错误';
+}
+
 // === Key 管理函数 ===
 async function loadKeyList() {
   const list = document.getElementById('keyList');
@@ -111,7 +120,7 @@ if (generateKeyBtn) {
         alert('生成失败: ' + (data.error || ''));
       }
     } catch (e) {
-      alert('请求失败: ' + e);
+      alert('请求失败: ' + fetchErrorMessage(e));
     }
   });
 }
@@ -189,19 +198,50 @@ if (settingsToggle) settingsToggle.addEventListener('click', openSettingsModal);
 if (settingsClose) settingsClose.addEventListener('click', closeSettingsModal);
 if (settingsBackdrop) settingsBackdrop.addEventListener('click', closeSettingsModal);
 
-// === 通用设置：一键启动 & 清除 API Key ===
-const quickStartBtn = document.getElementById('quickStartBtn');
+// === 设置页左侧导航栏切换 ===
+document.querySelectorAll('.settings-nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.settings-nav-item').forEach(i => i.classList.remove('active'));
+    document.querySelectorAll('.settings-page').forEach(p => p.classList.remove('active'));
+    item.classList.add('active');
+    document.getElementById('nav-' + item.dataset.nav).classList.add('active');
+  });
+});
+
+// === 通用设置：重启服务 & 清除 API Key ===
+const restartBtn = document.getElementById('restartBtn');
+const restartHint = document.getElementById('restartHint');
 const clearApiKeyBtn = document.getElementById('clearApiKeyBtn');
 
-if (quickStartBtn) {
-  quickStartBtn.addEventListener('click', () => {
-    closeSettingsModal();
-    const traceTab = document.querySelector('.tab[data-tab="trace"]');
-    if (traceTab) traceTab.click();
-    setTimeout(() => {
-      const uploadZone = document.getElementById('uploadZone');
-      if (uploadZone) uploadZone.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 100);
+if (restartBtn) {
+  restartBtn.addEventListener('click', async () => {
+    restartBtn.disabled = true;
+    const origHTML = restartBtn.innerHTML;
+    restartBtn.innerHTML = '<span class="btn-text">重启中...</span>';
+    restartHint.textContent = '';
+    try {
+      const resp = await apiFetch('/api/restart', { method: 'POST' });
+      const data = await resp.json();
+      if (data.success) {
+        restartHint.textContent = '✓ ' + data.message;
+        restartHint.style.color = 'var(--success)';
+        // 等 2 秒后自动跳转描图页
+        setTimeout(() => {
+          closeSettingsModal();
+          const traceTab = document.querySelector('.tab[data-tab="trace"]');
+          if (traceTab) traceTab.click();
+        }, 2000);
+      } else {
+        restartHint.textContent = '✗ ' + (data.error || '重启失败');
+        restartHint.style.color = 'var(--error)';
+      }
+    } catch (e) {
+      restartHint.textContent = '✗ 请求失败: ' + fetchErrorMessage(e);
+      restartHint.style.color = 'var(--error)';
+    } finally {
+      restartBtn.innerHTML = origHTML;
+      restartBtn.disabled = false;
+    }
   });
 }
 
@@ -305,7 +345,7 @@ cutoutBtn.addEventListener('click', async () => {
       cutoutPreview.innerHTML = `<div class="svg-placeholder" style="color:var(--error)">错误: ${escapeHtml(data.error)}</div>`;
     }
   } catch (e) {
-    cutoutPreview.innerHTML = `<div class="svg-placeholder" style="color:var(--error)">请求失败: ${escapeHtml(e)}</div>`;
+    cutoutPreview.innerHTML = `<div class="svg-placeholder" style="color:var(--error)">请求失败: ${escapeHtml(fetchErrorMessage(e))}</div>`;
   } finally {
     cutoutBtn.disabled = false;
     cutoutBtn.querySelector('.btn-text').classList.remove('hidden');
@@ -485,7 +525,7 @@ traceBtn.addEventListener('click', async () => {
       svgPreview.innerHTML = `<div class="svg-placeholder" style="color:var(--error)">错误: ${escapeHtml(data.error)}</div>`;
     }
   } catch (e) {
-    svgPreview.innerHTML = `<div class="svg-placeholder" style="color:var(--error)">请求失败: ${escapeHtml(e)}</div>`;
+    svgPreview.innerHTML = `<div class="svg-placeholder" style="color:var(--error)">请求失败: ${escapeHtml(fetchErrorMessage(e))}</div>`;
   } finally {
     traceBtn.disabled = false;
     traceBtn.querySelector('.btn-text').classList.remove('hidden');
@@ -542,7 +582,7 @@ document.getElementById('exportPdfConfirm').addEventListener('click', async () =
     a.click();
     URL.revokeObjectURL(a.href);
   } catch (e) {
-    alert('导出失败: ' + e);
+    alert('导出失败: ' + fetchErrorMessage(e));
   } finally {
     btn.disabled = false; btn.textContent = '生成印刷 PDF';
     exportPanel.classList.add('hidden');
@@ -552,6 +592,7 @@ document.getElementById('exportPdfConfirm').addEventListener('click', async () =
 // === 一键流水线：提取主色 & Pantone 匹配 ===
 const colorMatchBtn = document.getElementById('colorMatchBtn');
 const paletteResults = document.getElementById('paletteResults');
+let paletteExportData = null;
 
 colorMatchBtn.addEventListener('click', async () => {
   if (!traceFile.files[0]) return;
@@ -631,6 +672,53 @@ colorMatchBtn.addEventListener('click', async () => {
     });
     paletteResults.innerHTML = html;
 
+    // 导出印刷 PDF 按钮
+    paletteResults.insertAdjacentHTML(
+      'beforeend',
+      '<div style="text-align:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">' +
+      '<button class="btn btn-small btn-accent" id="paletteExportBtn">导出印刷 PDF</button>' +
+      '</div>'
+    );
+
+    // 存储导出数据（SVG base64 + palette 数据）
+    paletteExportData = {
+      svg_base64: data.svg_base64,
+      palette: data.palette,
+    };
+
+    document.getElementById('paletteExportBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('paletteExportBtn');
+      btn.disabled = true;
+      btn.textContent = '生成中...';
+      try {
+        const resp = await apiFetch('/api/pantone/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'palette',
+            svg_base64: paletteExportData.svg_base64,
+            palette: paletteExportData.palette,
+          }),
+        });
+        if (!resp.ok) {
+          const d = await resp.json().catch(() => ({}));
+          alert('导出失败: ' + (d.error || resp.status));
+          return;
+        }
+        const blob = await resp.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'colorflow_palette_report.pdf';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      } catch (e) {
+        alert('导出失败: ' + fetchErrorMessage(e));
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '导出印刷 PDF';
+      }
+    });
+
     // 展开/收起 top-3 匹配
     paletteResults.querySelectorAll('.swatch-expand').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -641,7 +729,7 @@ colorMatchBtn.addEventListener('click', async () => {
       });
     });
   } catch (e) {
-    paletteResults.innerHTML = `<div class="match-placeholder" style="color:var(--error)">请求失败: ${escapeHtml(e)}</div>`;
+    paletteResults.innerHTML = `<div class="match-placeholder" style="color:var(--error)">请求失败: ${escapeHtml(fetchErrorMessage(e))}</div>`;
   } finally {
     colorMatchBtn.disabled = false;
     colorMatchBtn.textContent = '提取主色 & Pantone 匹配';
@@ -679,7 +767,7 @@ pantoneBtn.addEventListener('click', async () => {
       pantoneError.classList.remove('hidden');
     }
   } catch (e) {
-    pantoneError.textContent = '请求失败: ' + e;
+    pantoneError.textContent = '请求失败: ' + fetchErrorMessage(e);
     pantoneError.classList.remove('hidden');
   }
 });
@@ -712,7 +800,7 @@ if (pantoneExportBtn) {
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (e) {
-      alert('导出失败: ' + e);
+      alert('导出失败: ' + fetchErrorMessage(e));
     } finally {
       pantoneExportBtn.textContent = '导出色卡 PDF';
     }
@@ -770,7 +858,7 @@ matchBtn.addEventListener('click', async () => {
       matchResults.innerHTML = '<div class="match-placeholder">未找到匹配颜色</div>';
     }
   } catch (e) {
-    matchResults.innerHTML = `<div class="match-placeholder" style="color:var(--error)">请求失败: ${e}</div>`;
+    matchResults.innerHTML = `<div class="match-placeholder" style="color:var(--error)">请求失败: ${escapeHtml(fetchErrorMessage(e))}</div>`;
   }
 });
 
@@ -807,9 +895,138 @@ if (matchExportBtn) {
       a.click();
       URL.revokeObjectURL(a.href);
     } catch (e) {
-      alert('导出失败: ' + e);
+      alert('导出失败: ' + fetchErrorMessage(e));
     } finally {
       matchExportBtn.textContent = '导出匹配报告 PDF';
     }
   });
 }
+
+// ============================================================
+// 3D 灰度图（高度图 / 位移贴图）
+// ============================================================
+const g3dUploadZone = document.getElementById('g3dUploadZone');
+const g3dFile = document.getElementById('g3dFile');
+const g3dPreviewImg = document.getElementById('g3dPreviewImg');
+const g3dBtn = document.getElementById('g3dBtn');
+const g3dPreview = document.getElementById('g3dPreview');
+const g3dInfo = document.getElementById('g3dInfo');
+const g3dSize = document.getElementById('g3dSize');
+const g3dDownload = document.getElementById('g3dDownload');
+const g3dHist = document.getElementById('g3dHist');
+const g3dHistMeta = document.getElementById('g3dHistMeta');
+const g3dHistBar = document.getElementById('g3dHistBar');
+const g3dContrast = document.getElementById('g3dContrast');
+const g3dContrastVal = document.getElementById('g3dContrastVal');
+const g3dGamma = document.getElementById('g3dGamma');
+const g3dGammaVal = document.getElementById('g3dGammaVal');
+const g3dSmooth = document.getElementById('g3dSmooth');
+const g3dSmoothVal = document.getElementById('g3dSmoothVal');
+
+let currentG3DBase64 = null;
+
+g3dContrast.addEventListener('input', () => g3dContrastVal.textContent = g3dContrast.value);
+g3dGamma.addEventListener('input', () => g3dGammaVal.textContent = g3dGamma.value);
+g3dSmooth.addEventListener('input', () => g3dSmoothVal.textContent = g3dSmooth.value);
+
+g3dUploadZone.addEventListener('click', () => g3dFile.click());
+g3dUploadZone.addEventListener('dragover', e => { e.preventDefault(); g3dUploadZone.classList.add('dragover'); });
+g3dUploadZone.addEventListener('dragleave', () => g3dUploadZone.classList.remove('dragover'));
+g3dUploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  g3dUploadZone.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) {
+    g3dFile.files = e.dataTransfer.files;
+    handleG3DFile(e.dataTransfer.files[0]);
+  }
+});
+
+g3dFile.addEventListener('change', e => {
+  if (e.target.files[0]) handleG3DFile(e.target.files[0]);
+});
+
+function handleG3DFile(file) {
+  if (!file.type.startsWith('image/')) {
+    alert('请上传图片文件');
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    alert('图片不能超过 10MB');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    g3dPreviewImg.src = e.target.result;
+    g3dPreviewImg.classList.remove('hidden');
+    g3dUploadZone.querySelector('.upload-placeholder').classList.add('hidden');
+    g3dBtn.disabled = false;
+  };
+  reader.readAsDataURL(file);
+}
+
+g3dBtn.addEventListener('click', async () => {
+  if (!g3dFile.files[0]) return;
+  g3dBtn.disabled = true;
+  g3dBtn.querySelector('.btn-text').classList.add('hidden');
+  g3dBtn.querySelector('.btn-loader').classList.remove('hidden');
+  g3dPreview.innerHTML = '<div class="svg-placeholder">生成灰度图中...</div>';
+  g3dHist.classList.add('hidden');
+  g3dInfo.classList.add('hidden');
+
+  const formData = new FormData();
+  formData.append('image', g3dFile.files[0]);
+  formData.append('invert', document.getElementById('g3dInvert').checked ? '1' : '0');
+  formData.append('contrast', g3dContrast.value);
+  formData.append('gamma', g3dGamma.value);
+  formData.append('smooth', g3dSmooth.value);
+  formData.append('auto_levels', document.getElementById('g3dAutoLevels').checked ? '1' : '0');
+  formData.append('bit_depth', document.getElementById('g3dBitDepth').value);
+
+  try {
+    const resp = await apiFetch('/api/grayscale3d', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (data.success) {
+      currentG3DBase64 = data.png_base64;
+      g3dPreview.innerHTML = `<img src="data:image/png;base64,${data.png_base64}" alt="3D 灰度图" style="max-width:100%;max-height:220px;object-fit:contain;"/>`;
+      g3dInfo.classList.remove('hidden');
+      const bd = data.bit_depth || 8;
+      g3dSize.textContent = `${(data.size / 1024).toFixed(1)} KB · ${data.width}×${data.height} · ${bd}-bit`;
+
+      // 渲染直方图
+      if (data.histogram && data.histogram.length === 256) {
+        g3dHist.classList.remove('hidden');
+        // 取最高 bin 的百分比作为比例
+        const maxVal = data.max_value || 1;
+        const minVal = data.min_value || 0;
+        g3dHistMeta.textContent = `峰值 ${data.hist_peak} · 范围 ${minVal}–${maxVal}`;
+
+        // 渲染 256 根柱子
+        let histHtml = '';
+        const hist = data.histogram;
+        const histMax = Math.max(...hist) || 1;
+        for (let i = 0; i < 256; i++) {
+          const h = hist[i] / histMax;
+          const pct = (h * 100).toFixed(1);
+          histHtml += `<div class="hist-bin" style="height:${pct}%;" title="亮度 ${i}: ${(hist[i] * 100).toFixed(2)}%"></div>`;
+        }
+        g3dHistBar.innerHTML = histHtml;
+      }
+    } else {
+      g3dPreview.innerHTML = `<div class="svg-placeholder" style="color:var(--error)">错误: ${escapeHtml(data.error)}</div>`;
+    }
+  } catch (e) {
+    g3dPreview.innerHTML = `<div class="svg-placeholder" style="color:var(--error)">请求失败: ${escapeHtml(fetchErrorMessage(e))}</div>`;
+  } finally {
+    g3dBtn.disabled = false;
+    g3dBtn.querySelector('.btn-text').classList.remove('hidden');
+    g3dBtn.querySelector('.btn-loader').classList.add('hidden');
+  }
+});
+
+g3dDownload.addEventListener('click', () => {
+  if (!currentG3DBase64) return;
+  const a = document.createElement('a');
+  a.href = 'data:image/png;base64,' + currentG3DBase64;
+  a.download = 'colorflow_3d_greyscale.png';
+  a.click();
+});

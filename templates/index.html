@@ -80,6 +80,10 @@
           <svg class="nav-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6" cy="8" r="4.2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="10" cy="8" r="4.2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
           色彩匹配
         </button>
+        <button class="tab" data-tab="greyscale3d">
+          <svg class="nav-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 14L14.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><rect x="1.5" y="6" width="4" height="8" fill="currentColor"/><rect x="6" y="4" width="4" height="10" fill="currentColor" opacity="0.6"/><rect x="10.5" y="2" width="4" height="12" fill="currentColor" opacity="0.35"/></svg>
+          3D 灰度图
+        </button>
       </nav>
 
       <footer class="sidebar-footer">
@@ -102,43 +106,60 @@
           </button>
         </div>
         <div class="settings-modal-body">
-          <div class="settings-panel">
-            <h3>通用</h3>
-            <div class="settings-section">
-              <p class="settings-desc">快速体验矢量描图功能</p>
-              <button class="btn btn-primary settings-action-btn" id="quickStartBtn">
-                <svg class="nav-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2l10 6-10 6z" fill="currentColor"/></svg>
-                一键启动
+          <!-- 左侧导航栏 -->
+          <nav class="settings-nav">
+            <div class="settings-nav-group">
+              <button class="settings-nav-item active" data-nav="general">
+                <svg class="nav-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 1a3 3 0 1 1 0-6 3 3 0 0 1 0 6z" fill="currentColor"/><path d="M6.5 1.5l-.5 1.2-1.3.3-.8-1L2.5 3l.3 1.3-1 .8-1.2-.5L0 6l1.2.5.5 1.2-.3 1.3-1 .8L1 11l1.3-.3.8 1 1.2-.5.5-1.2 1.3-.3.8 1L7 14.5l.5-1.2 1.3-.3.8 1L11 13l-.3-1.3 1-.8 1.2.5L14 10l-1.2-.5-.5-1.2.3-1.3 1-.8L13 5l-1.3.3-.8-1-1.2.5-.5 1.2-1.3.3-.8-1L7 1.5z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+                通用
+              </button>
+              <button class="settings-nav-item" data-nav="apikey">
+                <svg class="nav-icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="5" width="10" height="8" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5 5V3.5a1.5 1.5 0 0 1 3 0V5M12 8h1.5a1.5 1.5 0 0 1 0 3H12M14.5 5.5L15.2 4.8a.8.8 0 0 1 1.1 1.1l-.7.7M15.2 11.2l.7.7a.8.8 0 0 1-1.1 1.1l-.7-.7" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+                API Key
+              </button>
+              <button class="settings-nav-item" data-nav="mcp">
+                <svg class="nav-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h10v4H3zM3 8h4v4H3zM9 8h4v4H9z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+                MCP 接入
               </button>
             </div>
-            <div class="settings-section">
-              <p class="settings-desc">清除浏览器本地保存的 API Key</p>
-              <button class="btn btn-small btn-secondary settings-action-btn" id="clearApiKeyBtn">清除本地 Key</button>
-            </div>
-          </div>
-          <div class="settings-panel">
-            <h3>API Key 管理</h3>
-            <div class="settings-section">
-              <p class="settings-desc">生成 Key 后，前端请求和 MCP 接入共用同一把钥匙</p>
-              <button class="btn btn-primary settings-action-btn" id="generateKeyBtn">+ 生成新 Key</button>
-            </div>
-            <div class="key-list" id="keyList">
-              <div class="key-empty">暂无 Key</div>
-            </div>
-            <div class="key-modal hidden" id="keyModal">
-              <div class="key-modal-box">
-                <div class="key-modal-title">✅ Key 已生成（仅显示一次）</div>
-                <input type="text" id="newKeyDisplay" class="key-display-input" readonly />
-                <button class="btn btn-small btn-primary" id="copyNewKeyBtn">复制 Key</button>
-                <div class="key-modal-hint">MCP 配置已自动填充 → 右侧「MCP 智能体接入」可直接复制</div>
+          </nav>
+          <!-- 右侧内容区 -->
+          <div class="settings-content">
+            <div class="settings-page active" id="nav-general">
+              <div class="settings-section">
+                <p class="settings-desc">重新启动 ColorFlow 服务（杀掉旧进程，拉起新实例）</p>
+                <button class="btn btn-primary settings-action-btn" id="restartBtn">
+                  <svg class="nav-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5A5 5 0 0 1 11.5 4 5 5 0 0 1 13 8.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M13 4v3.5h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 12v-3.5h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  重启服务
+                </button>
+                <p class="settings-hint" id="restartHint"></p>
+              </div>
+              <div class="settings-section">
+                <p class="settings-desc">清除浏览器本地保存的 API Key</p>
+                <button class="btn btn-small btn-secondary settings-action-btn" id="clearApiKeyBtn">清除本地 Key</button>
               </div>
             </div>
-          </div>
-          <div class="settings-panel">
-            <h3>MCP 智能体接入</h3>
-            <div class="settings-section">
-              <p class="settings-desc">复制下方 JSON 到 Claude Code / Cursor 的 .mcp.json</p>
-              <pre class="mcp-config-block" id="mcpConfig">{
+            <div class="settings-page" id="nav-apikey">
+              <div class="settings-section">
+                <p class="settings-desc">生成 Key 后，前端请求和 MCP 接入共用同一把钥匙</p>
+                <button class="btn btn-primary settings-action-btn" id="generateKeyBtn">+ 生成新 Key</button>
+              </div>
+              <div class="key-list" id="keyList">
+                <div class="key-empty">暂无 Key</div>
+              </div>
+              <div class="key-modal hidden" id="keyModal">
+                <div class="key-modal-box">
+                  <div class="key-modal-title">✅ Key 已生成（仅显示一次）</div>
+                  <input type="text" id="newKeyDisplay" class="key-display-input" readonly />
+                  <button class="btn btn-small btn-primary" id="copyNewKeyBtn">复制 Key</button>
+                  <div class="key-modal-hint">MCP 配置已自动填充 → 「MCP 接入」标签可直接复制</div>
+                </div>
+              </div>
+            </div>
+            <div class="settings-page" id="nav-mcp">
+              <div class="settings-section">
+                <p class="settings-desc">复制下方 JSON 到 Claude Code / Cursor 的 .mcp.json</p>
+                <pre class="mcp-config-block" id="mcpConfig">{
   "mcpServers": {
     "colorflow": {
       "command": "python",
@@ -149,20 +170,22 @@
     }
   }
 }</pre>
-              <button class="btn btn-small btn-primary" id="copyMcpConfigBtn">复制配置</button>
-            </div>
-            <div class="settings-section">
-              <p class="settings-desc">可用工具（9 个）</p>
-              <div class="mcp-tools-list">
-                <span class="mcp-tool-tag">trace_image</span>
-                <span class="mcp-tool-tag">cutout</span>
-                <span class="mcp-tool-tag">cutout_then_trace</span>
-                <span class="mcp-tool-tag">trace_and_match</span>
-                <span class="mcp-tool-tag">match_pantone</span>
-                <span class="mcp-tool-tag">pantone_lookup</span>
-                <span class="mcp-tool-tag">pantone_colors</span>
-                <span class="mcp-tool-tag">export_print</span>
-                <span class="mcp-tool-tag">quote_print</span>
+                <button class="btn btn-small btn-primary" id="copyMcpConfigBtn">复制配置</button>
+              </div>
+              <div class="settings-section">
+                <p class="settings-desc">可用工具（11 个）</p>
+                <div class="mcp-tools-list">
+                  <span class="mcp-tool-tag">trace_image</span>
+                  <span class="mcp-tool-tag">cutout</span>
+                  <span class="mcp-tool-tag">cutout_then_trace</span>
+                  <span class="mcp-tool-tag">trace_and_match</span>
+                  <span class="mcp-tool-tag">match_pantone</span>
+                  <span class="mcp-tool-tag">pantone_lookup</span>
+                  <span class="mcp-tool-tag">pantone_colors</span>
+                  <span class="mcp-tool-tag">export_print</span>
+                  <span class="mcp-tool-tag">quote_print</span>
+                  <span class="mcp-tool-tag">greyscale3d</span>
+                </div>
               </div>
             </div>
           </div>
@@ -485,6 +508,87 @@
             </div>
             <div class="export-row hidden" id="matchExportRow">
               <button class="btn btn-small btn-secondary" id="matchExportBtn">导出匹配报告 PDF</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab: 3D 灰度图 -->
+        <section class="tab-content" id="tab-greyscale3d">
+          <div class="card">
+            <div class="card-header">
+              <h2>3D 灰度图</h2>
+              <p class="card-desc">将彩色图片转为灰度高度图 / 位移贴图，用于 3D 建模（Blender / 3D 打印 / 深度通道）</p>
+            </div>
+            <div class="trace-layout">
+              <div class="trace-input">
+                <div class="upload-zone" id="g3dUploadZone">
+                  <input type="file" id="g3dFile" accept="image/*" hidden />
+                  <div class="upload-placeholder">
+                    <svg class="upload-icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="56" height="56" aria-hidden="true"><path fill="currentColor" d="M853.344 341.344C853.344 294.4 814.944 256 768 256s-85.344 38.4-85.344 85.344 38.4 85.344 85.344 85.344 85.344-38.4 85.344-85.344z"/><path fill="currentColor" d="M0 85.344v853.344h512v-85.344H85.344V742.4l256-256L512 657.056l59.744-59.744-230.4-230.4-256 256V170.656h853.344v298.656l85.344 85.344V85.312z"/><path fill="currentColor" d="M951.456 840.544L1011.2 780.8l-200.544-200.544-200.544 200.544 59.744 59.744L768 742.4v238.944h85.344V742.4z"/></svg>
+                    <div class="upload-text">点击上传或拖拽图片</div>
+                    <div class="upload-hint">PNG / JPG / WebP · 最大 10MB</div>
+                  </div>
+                  <img id="g3dPreviewImg" class="preview-img hidden" />
+                </div>
+                <div class="params">
+                  <div class="param-row">
+                    <label>位深</label>
+                    <select id="g3dBitDepth">
+                      <option value="8">8-bit（通用）</option>
+                      <option value="16">16-bit（高精度）</option>
+                    </select>
+                  </div>
+                  <div class="param-row">
+                    <label>对比度: <span id="g3dContrastVal">1.0</span></label>
+                    <input type="range" id="g3dContrast" min="0.5" max="3" step="0.1" value="1.0" />
+                  </div>
+                  <div class="param-row">
+                    <label>Gamma: <span id="g3dGammaVal">1.0</span></label>
+                    <input type="range" id="g3dGamma" min="0.5" max="2" step="0.1" value="1.0" />
+                  </div>
+                  <div class="param-row">
+                    <label>平滑: <span id="g3dSmoothVal">0</span></label>
+                    <input type="range" id="g3dSmooth" min="0" max="5" step="0.5" value="0" />
+                  </div>
+                  <div class="param-row param-row-checkbox">
+                    <label class="checkbox-row">
+                      <input type="checkbox" id="g3dInvert" />
+                      <span>反色（黑=低 白=高）</span>
+                    </label>
+                  </div>
+                  <div class="param-row param-row-checkbox">
+                    <label class="checkbox-row">
+                      <input type="checkbox" id="g3dAutoLevels" />
+                      <span>自动级别（归一化亮度）</span>
+                    </label>
+                  </div>
+                </div>
+                <button class="btn btn-primary" id="g3dBtn" disabled>
+                  <span class="btn-text">生成灰度图</span>
+                  <span class="btn-loader hidden">处理中...</span>
+                </button>
+              </div>
+              <div class="trace-output">
+                <div class="svg-preview" id="g3dPreview">
+                  <div class="svg-placeholder">等待生成...</div>
+                </div>
+                <div class="svg-info hidden" id="g3dInfo">
+                  <span class="svg-size" id="g3dSize"></span>
+                  <button class="btn btn-small" id="g3dDownload">下载灰度 PNG</button>
+                </div>
+                <div class="g3d-histogram hidden" id="g3dHist">
+                  <div class="hist-header">
+                    <span class="hist-title">亮度直方图</span>
+                    <span class="hist-meta" id="g3dHistMeta"></span>
+                  </div>
+                  <div class="hist-bar" id="g3dHistBar"></div>
+                  <div class="hist-axis">
+                    <span>0 (黑)</span>
+                    <span>128 (灰)</span>
+                    <span>255 (白)</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </section>
