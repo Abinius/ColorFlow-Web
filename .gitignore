@@ -25,3 +25,6 @@ models/models/
 
 # 大模型文件（通过 download_models.py 下载）
 models/u2net_human_seg.onnx
+
+# 补丁脚本下载的 NuGet 缓存包（可重新下载）
+patches/*.nupkg
