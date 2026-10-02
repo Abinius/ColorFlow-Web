@@ -364,19 +364,14 @@ def main():
         # 注意 icon 是 webview.start() 的参数（不是 create_window 的）——它写入
         # _state['icon']，winforms 后端在建窗时读取；文档虽写"仅 GTK/QT"，但该分支
         # 在 Windows 上同样生效。图标同时由 spec 打进包内，frozen 时从 _MEIPASS 读取。
-        #
-        # 优先浅色版：原版是「深色方块 + 透明镂空 M」，M 靠透出背景成白色，所以在深色
-        # 任务栏/资源管理器上方块与 M 会一起消失。浅色版（浅底 + 实心深 M）明暗皆清晰。
-        icon_path = None
-        for _name in ("colorflow-light.ico", "colorflow.ico"):
-            _candidate = get_base_dir() / _name
-            if _candidate.is_file():
-                icon_path = _candidate
-                break
-        if icon_path is not None:
+        # colorflow.ico 是「深色方块 + 实心白 M」：深色方块保证浅色背景上清楚，实心白 M
+        # 保证深色背景上仍可辨认。（若把 M 做成透明镂空，深色背景下方块与 M 会一起消失 ——
+        # 那正是这个图标的原始缺陷。）
+        icon_path = get_base_dir() / "colorflow.ico"
+        if icon_path.is_file():
             log(f"窗口图标: {icon_path}")
         else:
-            log("未找到 colorflow-light.ico / colorflow.ico；窗口图标将回退为 exe/解释器自带图标")
+            log("未找到 colorflow.ico；窗口图标将回退为 exe/解释器自带图标")
 
         webview.create_window(
             title="ColorFlow - AI 矢量描图工具",
@@ -389,7 +384,7 @@ def main():
             confirm_close=True,
         )
 
-        webview.start(debug=False, icon=str(icon_path) if icon_path is not None else None)
+        webview.start(debug=False, icon=str(icon_path) if icon_path.is_file() else None)
 
     except Exception as exc:
         log("启动失败:\n" + traceback.format_exc())

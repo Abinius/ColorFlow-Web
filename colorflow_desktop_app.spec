@@ -38,25 +38,16 @@ CONF['workpath'] = os.path.join(BASE_DIR, "build")
 BUNDLE_U2NET = os.environ.get("COLORFLOW_BUNDLE_U2NET") == "1"
 MODEL_FILES = ["silueta.onnx"] + (["u2net_human_seg.onnx"] if BUNDLE_U2NET else [])
 
-# 桌面图标：优先浅色版。原版是「深色方块 + 透明镂空 M」——M 靠透出背景成白色，
-# 因此在**深色背景**（深色任务栏/资源管理器）上方块与 M 同时消失，几乎看不见。
-# 浅色版把方块改成浅色、M 改成实心深色，在明暗背景上都清晰。两版都打进包内。
-ICON_CANDIDATES = ("colorflow-light.ico", "colorflow.ico")
-ICON_NAME = next(
-    (n for n in ICON_CANDIDATES if os.path.exists(os.path.join(BASE_DIR, n))),
-    "colorflow.ico",
-)
+# 桌面图标：colorflow.ico 是「深色方块 + 实心白 M」——深色方块保证浅色背景上清楚，实心白 M
+# 保证深色背景上可辨认。（若 M 做成透明镂空，深色背景下方块与 M 会一起消失，这就是原缺陷。）
+ICON_NAME = "colorflow.ico"
 
 datas = [
     (os.path.join(BASE_DIR, "templates"), "templates"),
     (os.path.join(BASE_DIR, "static"), "static"),
     (os.path.join(BASE_DIR, "assets"), "assets"),     # ComfyUI 工作流模板
+    (os.path.join(BASE_DIR, ICON_NAME), "."),         # 窗口图标（frozen 时从 _MEIPASS 读取）
 ]
-
-for _ico in ICON_CANDIDATES:
-    _p = os.path.join(BASE_DIR, _ico)
-    if os.path.exists(_p):
-        datas.append((_p, "."))                       # 窗口图标（frozen 时从 _MEIPASS 读取）
 
 # 逐个文件打包（而不是整个 models/ 目录），避免连带塞入未选中的模型与 rembg 缓存目录
 _bundled_mb = 0.0
