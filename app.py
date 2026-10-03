@@ -304,7 +304,7 @@ def _strip_white_paths(svg_bytes, tolerance=16):
 
 @app.route("/")
 def index():
-    resp = render_template("index.html")
+    resp = render_template("index.html", rembg_models=rembg_models_with_availability())
     # no-cache：改版后浏览器不再显示旧页面（开发清单 P1-2.1）
     return Response(resp, headers={
         "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -389,6 +389,49 @@ def _is_deterministic_failure(e: Exception) -> bool:
     return "not supported" in msg or "no session class" in msg
 
 
+_rembg_imported = None
+_rembg_import_lock = threading.Lock()
+
+
+def _rembg_import():
+    """导入并返回 (remove, new_session)：线程安全，且只导入一次。
+
+    两个坑在冻结环境里都踩到过：
+      1) `from rembg import remove` 会把真实错误盖成一句
+         "cannot import name 'remove' from 'rembg'"；
+      2) rembg 首次导入很慢（要拉 onnxruntime / pymatting / numba，实测数秒），
+         而流水线会**并发**发起请求，后到的线程会看到半初始化的 rembg.bg 模块，
+         同样报 "cannot import name 'remove' from 'rembg.bg'"。
+    所以这里：加锁串行化首次导入；子模块导入失败时回退到包属性（同一个函数对象）。
+    """
+    global _rembg_imported
+    if _rembg_imported is not None:
+        return _rembg_imported
+
+    with _rembg_import_lock:
+        if _rembg_imported is not None:  # 双检：等锁期间可能已被其它线程导入
+            return _rembg_imported
+        try:
+            from rembg.bg import remove
+            from rembg.session_factory import new_session
+        except Exception:
+            logger.exception("导入 rembg 子模块失败，回退到包属性")
+            import rembg
+
+            logger.error(
+                "rembg 模块状态: __file__=%s 是包=%s 有 remove=%s 有 new_session=%s",
+                getattr(rembg, "__file__", None),
+                hasattr(rembg, "__path__"),
+                hasattr(rembg, "remove"),
+                hasattr(rembg, "new_session"),
+            )
+            remove = rembg.remove
+            new_session = rembg.new_session
+        _rembg_imported = (remove, new_session)
+        logger.info("rembg 导入完成: remove=%r new_session=%r", remove, new_session)
+        return _rembg_imported
+
+
 def _get_rembg_session(model="silueta"):
     """获取（并缓存）rembg session，按模型名分表缓存，避免每次请求重新加载。
 
@@ -409,7 +452,7 @@ def _get_rembg_session(model="silueta"):
             # 冷却期已过 → 落入下方重新尝试加载
             _rembg_session_errors.pop(model, None)
 
-        from rembg import new_session
+        new_session = _rembg_import()[1]
 
         try:
             _rembg_sessions[model] = new_session(model)
@@ -422,23 +465,46 @@ def _get_rembg_session(model="silueta"):
 
 def _rembg_cutout(image_bytes, model="silueta", **kwargs):
     """位图字节 → rembg 抠图 → 透明底 RGBA PIL Image（复用缓存 session，精度参数透传）"""
-    from rembg import remove as _rembg_remove
+    remove = _rembg_import()[0]
 
     session = _get_rembg_session(model)
-    result = _rembg_remove(image_bytes, session=session, **kwargs)
+    result = remove(image_bytes, session=session, **kwargs)
     return _bio_open_rgba(result)
 
 
-# rembg 支持的模型（保留随包可用 + 已缓存可下载的模型，剔除需下载/需API的模型）
+# rembg 支持的模型（剔除需下载才能用/需 API 的模型）。是否**本地可用**由
+# _rembg_model_available 判断：随包附带、用户模型目录或 rembg 缓存里有 .onnx 才算可用；
+# 没有则会尝试联网下载（u2net_human_seg 约 168MB），冻结环境常常下不动。
 REMBG_MODELS = [
-    ("silueta", "通用 · 快速（默认，已随包附带）"),
-    ("u2net_human_seg", "人像 · 精细（已缓存）"),
+    ("silueta", "通用 · 快速"),
+    ("u2net_human_seg", "人像 · 精细"),
 ]
+
+
+def _rembg_model_dir():
+    """rembg 查找与下载模型的目录（与 rembg 内部取值一致）"""
+    return os.environ.get("U2NET_HOME") or os.path.expanduser("~/.u2net")
+
+
+def _rembg_model_available(name):
+    """模型文件是否已在本地。不在则需联网下载，失败时要给出可操作的提示。"""
+    try:
+        return os.path.isfile(os.path.join(_rembg_model_dir(), f"{name}.onnx"))
+    except Exception:
+        return False
+
+
+def rembg_models_with_availability():
+    """给前端用的模型清单：[{id, label, available}]"""
+    return [
+        {"id": mid, "label": label, "available": _rembg_model_available(mid)}
+        for mid, label in REMBG_MODELS
+    ]
 
 
 def _cutout_parameters():
     """从表单读取抠图精度参数（非法值回退 rembg 默认值）"""
-    # 模型名校验：非法模型回退 silueta（已随包附带，无需下载）
+    # 模型名校验：非法模型回退 silueta
     model = request.form.get("model", "silueta").strip() or "silueta"
     VALID_REMBG_MODELS = {m[0] for m in REMBG_MODELS}
     if model not in VALID_REMBG_MODELS:
@@ -506,7 +572,31 @@ def cutout_api():
             return jsonify({"error": f"模型 '{model}' 加载失败（可能缓存损坏），建议换用 silueta 或重启服务"}), 500
         return jsonify({"error": err}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        err = str(e)
+        # 模型没随包附带时会先尝试联网下载；下载失败（无网络/超时）必须给出可操作的提示，
+        # 否则用户只能看到一句底层异常（例如 numba 的 locator 报错）
+        if not _rembg_model_available(model):
+            return (
+                jsonify(
+                    {
+                        "error": (
+                            f"模型 '{model}' 本地不存在，自动下载失败：{err}。"
+                            f"可改用 silueta，或手动把 {model}.onnx 放到 {_rembg_model_dir()} 后重试"
+                        )
+                    }
+                ),
+                500,
+            )
+        return jsonify({"error": err}), 500
+
+
+@app.route("/api/cutout/models", methods=["GET"])
+def cutout_models_api():
+    """抠图模型清单与本地可用性（前端据此禁用未下载的模型）"""
+    return jsonify({
+        "models": rembg_models_with_availability(),
+        "model_dir": _rembg_model_dir(),
+    })
 
 
 @app.route("/api/trace", methods=["POST"])

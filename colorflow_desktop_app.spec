@@ -62,14 +62,15 @@ for _name in MODEL_FILES:
         print(f"[spec] 跳过缺失的模型 models/{_name}（请先运行 download_models.py）")
 print(f"[spec] 模型合计 {_bundled_mb:.1f} MB；COLORFLOW_BUNDLE_U2NET={BUNDLE_U2NET}")
 
-# pywebview / clr_loader / pythonnet 都没有 PyInstaller hook，它们的非 .py 运行时文件
-# 必须显式收集，否则打包出的 exe 一创建窗口就会失败：
-#   webview     -> WebView2 托管程序集 + WebView2Loader.dll + 注入用 js
-#   clr_loader  -> 原生 ClrLoader.dll（netfx/coreclr 宿主都靠它）
-#   pythonnet   -> Python.Runtime.dll 及其依赖
+# 下列包都没有 PyInstaller hook，它们的**非 .py 运行时文件**必须显式收集，否则：
+#   webview     -> 缺 WebView2 托管程序集 + WebView2Loader.dll + 注入用 js，创建窗口即失败
+#   clr_loader  -> 缺原生 ClrLoader.dll（netfx/coreclr 宿主都靠它）
+#   pythonnet   -> 缺 Python.Runtime.dll 及其依赖
+#   mcp_print   -> 缺 Pantone 色库数据 data/pantone_colors.json（它是 JSON 数据文件，
+#                  PyInstaller 不会自动收），/api/pantone/* 会报 FileNotFoundError
 from PyInstaller.utils.hooks import collect_data_files
 
-for _pkg in ("webview", "clr_loader", "pythonnet"):
+for _pkg in ("webview", "clr_loader", "pythonnet", "mcp_print"):
     _collected = collect_data_files(_pkg)
     datas += _collected
     print(f"[spec] 收集 {_pkg} 运行时文件 {len(_collected)} 个")

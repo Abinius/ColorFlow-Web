@@ -272,8 +272,9 @@
                   <div class="param-row">
                     <label>抠图模型</label>
                     <select id="cutoutModel">
-                      <option value="silueta">通用快速（默认）</option>
-                      <option value="u2net_human_seg">人像精细</option>
+                      {% for m in rembg_models|default([{'id': 'silueta', 'label': '通用 · 快速', 'available': true}]) %}
+                      <option value="{{ m.id }}"{% if not m.available %} disabled{% endif %}>{{ m.label }}{% if not m.available %}（未下载 · 需联网）{% endif %}</option>
+                      {% endfor %}
                     </select>
                   </div>
                   <div class="param-row param-row-checkbox">
@@ -420,8 +421,9 @@
                     <div class="param-row">
                       <label>抠图模型</label>
                       <select id="traceCutoutModel">
-                        <option value="silueta">通用快速（默认）</option>
-                        <option value="u2net_human_seg">人像精细</option>
+                        {% for m in rembg_models|default([{'id': 'silueta', 'label': '通用 · 快速', 'available': true}]) %}
+                        <option value="{{ m.id }}"{% if not m.available %} disabled{% endif %}>{{ m.label }}{% if not m.available %}（未下载 · 需联网）{% endif %}</option>
+                        {% endfor %}
                       </select>
                     </div>
                     <div class="param-row param-row-checkbox">

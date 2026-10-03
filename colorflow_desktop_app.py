@@ -35,6 +35,84 @@ def log(msg):
 
 
 # ============================================================
+# 冻结环境补丁（必须在导入 app / rembg / pymatting 之前生效）
+# ============================================================
+def patch_numba_disk_cache():
+    """关闭 numba 的磁盘缓存，修掉冻结环境下抠图（Alpha Matting）报 500 的问题。
+
+    pymatting 的 njit 函数都显式写了 cache=True（例：pymatting/util/kdtree.py:7）。
+    numba 要依据**函数源文件**推导缓存路径，而 PyInstaller 从 PYZ 导入的模块在磁盘上
+    没有对应源文件，于是装饰期就抛（出处 numba/core/caching.py:423）：
+
+        RuntimeError: cannot cache function '_make_tree':
+                      no locator available for file 'pymatting\\util\\kdtree.py'
+
+    该异常发生在 import pymatting.util.kdtree 时；pymatting 是请求期懒加载的，所以表现为
+    /api/cutout 直接 500（且错误信息是一句看不出所以然的 RuntimeError）。
+
+    这里把 njit/jit 的 cache 强制为 False（本就是 numba 的默认值）：JIT 编译与加速完全
+    保留，只是不再落盘缓存。仅冻结环境生效，且幂等。
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    try:
+        import numba
+    except Exception as exc:
+        log(f"numba 不可用，跳过磁盘缓存补丁（{exc}）")
+        return
+
+    for name in ("njit", "jit"):
+        orig = getattr(numba, name, None)
+        if orig is None or getattr(orig, "_colorflow_no_disk_cache", False):
+            continue
+
+        def _wrap(original):
+            def wrapper(*args, **kwargs):
+                kwargs["cache"] = False
+                return original(*args, **kwargs)
+
+            wrapper._colorflow_no_disk_cache = True
+            wrapper.__name__ = getattr(original, "__name__", "wrapper")
+            wrapper.__doc__ = getattr(original, "__doc__", None)
+            return wrapper
+
+        setattr(numba, name, _wrap(orig))
+        log(f"已关闭 numba 磁盘缓存（numba.{name} → cache=False），规避冻结环境缓存定位失败")
+
+
+patch_numba_disk_cache()
+
+
+def setup_file_logging():
+    """把标准 logging 的输出也写进桌面应用日志文件。
+
+    打包用了 noconsole=True，进程没有控制台：Flask / werkzeug / 业务模块的 logger
+    输出原本全部丢失。后端一旦在运行期报错（例如抠图 500），日志里只剩一句用户可见
+    的错误，真正的异常堆栈无从追查。这里把根 logger 接到同一个日志文件上。
+    """
+    try:
+        import logging
+
+        root = logging.getLogger()
+        if getattr(root, "_colorflow_file_handler", False):
+            return
+        handler = logging.FileHandler(LOG_PATH, encoding="utf-8")
+        handler.setFormatter(
+            logging.Formatter("[%(asctime)s] %(levelname)s %(name)s: %(message)s", datefmt="%H:%M:%S")
+        )
+        handler.setLevel(logging.INFO)
+        root.addHandler(handler)
+        if root.level == logging.NOTSET or root.level > logging.INFO:
+            root.setLevel(logging.INFO)
+        root._colorflow_file_handler = True
+    except Exception as exc:
+        log(f"配置日志文件失败（{exc}）")
+
+
+setup_file_logging()
+
+
+# ============================================================
 # 错误提示
 # ============================================================
 def show_error(summary):
