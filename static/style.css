@@ -1287,7 +1287,9 @@ body {
 @media (max-width: 960px) {
   .gen-layout { grid-template-columns: 1fr; }
 }
-.gen-input { display: flex; flex-direction: column; gap: 12px; }
+/* 两列都必须可收缩：列内 select 的 min-content（最长选项文本）否则会把整列撑破 */
+.gen-layout > * { min-width: 0; }
+.gen-input { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .gen-prompt-input {
   width: 100%;
   min-height: 84px;
@@ -1305,33 +1307,38 @@ body {
   outline: none;
   border-color: var(--ink);
 }
+/* 这里原来是三列网格，但 1fr = minmax(auto, 1fr)：后端下拉框最长选项
+   "自动（按优先级降级）" 的 min-content 达 542px，把整列撑到 1053px 并溢出工作区。
+   改为逐行排列（与其它 param-row 一致），并让 select 可收缩。 */
 .gen-opts {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 10px;
 }
-@media (max-width: 560px) {
-  .gen-opts { grid-template-columns: 1fr; }
-}
-.gen-ref-zone {
-  min-height: 96px;
-}
-.gen-reverse-block {
+.gen-opts .param-row,
+.gen-opts .param-row select { min-width: 0; }
+/* 两个上传框统一规格：整列宽 + 同高 → 左右边缘与垂直位置都对齐；
+   描述文字移到框下方，只作提示（.gen-upload-hint） */
+.gen-upload-block {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
 }
-.gen-reverse-block .upload-zone {
-  flex: 1 1 auto;
+.gen-upload-block .upload-zone {
+  width: 100%;
+  min-height: 120px;
 }
-.gen-reverse-block .btn {
-  align-self: flex-start;
+.gen-upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.gen-upload-actions .btn {
   font-size: 12px;
   padding: 8px 14px;
 }
-.gen-reverse-zone {
-  min-height: 88px;
-}
+.gen-upload-hint { margin: 0; }
 
 /* 参考图库 */
 .gen-ref-gallery {
@@ -1433,6 +1440,7 @@ body {
   border-radius: var(--radius-md);
   background: var(--surface-soft);
   padding: 12px;
+  min-width: 0;   /* 展开后里面的 select 同样不得把面板撑宽 */
 }
 .gen-template-header {
   display: flex;
@@ -1514,8 +1522,10 @@ body {
 .gen-template-body .param-row {
   margin-bottom: 0;
 }
+.gen-template-body .param-row { min-width: 0; }
 .gen-template-body select {
   width: 100%;
+  min-width: 0;
   padding: 8px 10px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-sm);
@@ -1524,7 +1534,7 @@ body {
 }
 .tpl-param-row {
   display: grid;
-  grid-template-columns: 100px 1fr;
+  grid-template-columns: 100px minmax(0, 1fr);   /* 1fr 的 auto 最小值会被输入内容撑破 */
   gap: 8px;
   align-items: center;
 }
